@@ -85,6 +85,8 @@ function Data:get_value(_address, _name)
 	elseif (metadata.size == 0x04) then
 		if (metadata.type == "float") then
 			return mainmemory.readfloat((_address + metadata.offset), true)
+		elseif metadata.type == "signed" then
+			return mainmemory.read_s32_be(_address + metadata.offset)
 		else
 			return mainmemory.read_u32_be(_address + metadata.offset)
 		end

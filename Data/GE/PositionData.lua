@@ -1,7 +1,7 @@
 require "Data\\Data"
 require "Data\\GE\\GameData"
 
--- Now including tile data.. though it's grown a bit big.
+-- Now including tile & pad data.. for now
 
 PositionData = Data.create()
 
@@ -29,6 +29,168 @@ PositionData.metadata =
 	{["offset"] = 0x2C, ["size"] = 0x4, ["type"] = "hex", 		["name"] = "room_list"} -- 0xFF = End of list
 }
 
+local function distSqToPad(actorPos, padNum, somePadInfo)
+	local padPos = {
+		x = memory.readfloat(somePadInfo + (0x2c * padNum) + 0x0, true),
+		z = memory.readfloat(somePadInfo + (0x2c * padNum) + 0x8, true),
+	}
+	local diff = {
+		x = padPos.x - actorPos.x,
+		z = padPos.z - actorPos.z,
+	}
+	return diff.x*diff.x + diff.z*diff.z
+end
+
+
+-- 7F0B2718, but cleaned up
+local function cleanerTileBFS(sourceTile, predicate)
+	-- Key improvements over GE's implementation
+	--	(2) onStack 'set'
+	--	(3) inner loop is only over the outer ring, not all seen tiles
+	--	(4) predicate uses a 'set' rather than a loop
+
+	-- We're still not going to cache the result though, could lead to problems across levels
+
+	local stack = {}
+	local onStack = {}
+
+	if (predicate(sourceTile)) then
+		return sourceTile
+	end
+
+	-- Push the source tile onto the stack
+	local iterStackLimit = 1
+	table.insert(stack, sourceTile)
+	onStack[sourceTile] = true
+
+	local fullStackHeight = iterStackLimit
+	local prevIterLimit = 0
+
+	-- Outer loop, over distance from the centre
+	while true do
+
+		-- Mid loop, only loop over this ring now rather than the whole stack
+		for stackIndex = (prevIterLimit+1),iterStackLimit do
+			local pointIndex = 0
+			local tile = stack[stackIndex]
+			--console.log(("Tile %06X"):format(TileData:get_value(tile, "name")))
+
+			local pointCount = TileData.get_point_count(tile)
+			local internalPtr = tile
+
+			-- Inner loop, over the neighbours of this tile
+			while (pointIndex < pointCount) do
+				
+				-- Get neighbour tile and test if it's "null"
+				local index = memory.read_u16_be(internalPtr + 0xe)
+				neighbourTile = index * 8 + TileData.get_start_address() - 0x80000000
+
+				if (bit.rshift(index, 4) ~= 0 and not onStack[neighbourTile]) then
+					-- No longer looping over the whole stack
+						
+					if (predicate(neighbourTile)) then
+						return neighbourTile
+					end
+					
+					-- Add to the stack, and leave after probably overflowing by 1
+					fullStackHeight = fullStackHeight + 1
+					table.insert(stack, neighbourTile)
+					onStack[neighbourTile] = true
+					if (350 < fullStackHeight) then
+						return 0
+					end
+
+					-- Unnecessary.. presumably a compiler artifact?
+					--pointCount = *(short *)(tile + 6) >> 0xc & 0xf;
+				end
+
+				pointIndex = pointIndex + 1
+				internalPtr = internalPtr + 8
+			end
+
+		end
+	
+
+		-- Mark all tiles as accessible in the next loop, if there are more to do
+		if fullStackHeight == iterStackLimit then
+			break
+		end
+
+		prevIterLimit = iterStackLimit	-- addition
+		iterStackLimit = fullStackHeight
+	end
+	
+	return 0
+
+end
+
+
+
+
+-- Mimicing 7f027cd4, tile -> pad (-> BFS) -> closest of this & it's neighbour
+-- Except we've visited https://en.wikipedia.org/wiki/Breadth-first_search in our lifetime
+function PositionData.getNearPad(posDataAddr)
+	local tile = PositionData:get_value(posDataAddr, "tile_pointer")
+	local somePadInfo = memory.read_u32_be(0x075d18) - 0x80000000
+	local padStart = PadData.get_start_address()
+
+	-- See if this tile has some pad, and also prep our efficient predicate
+	local padOnTile = {}
+
+	local currPad = memory.read_u32_be(0x075d00) - 0x80000000 - PadData.size
+	local padNum
+	local assocTile = -1
+	while assocTile ~= tile do
+		currPad = currPad + PadData.size
+		padNum = PadData:get_value(currPad,"number")
+
+		if padNum < 0 then
+			break
+		end
+
+		assocTile = memory.read_u32_be(somePadInfo + (0x2c * padNum) + 0x28)
+		padOnTile[assocTile] = currPad
+	end
+
+
+	-- If we didn't find a pad on our tile, we did prep 'padOnTile'
+	-- So perform our BFS with a decent predicate
+	if padNum < 0 then
+		local function efficientPredicate(t)
+			return padOnTile[t + 0x80000000] ~= nil
+		end
+
+		paddedTile = cleanerTileBFS(tile - 0x80000000, efficientPredicate)
+		assert(paddedTile ~= 0, "BFS failed")
+
+		currPad = padOnTile[paddedTile + 0x80000000]
+		padNum = PadData:get_value(currPad, "number")
+	end
+
+	-- Find which of this pad and it's neighbours are closest
+	local actorPos = PositionData:get_value(posDataAddr, "position")
+	local linkageList = PadData:get_value(currPad, "linkageList") - 0x80000000
+
+	local shortestDist = distSqToPad(actorPos, padNum, somePadInfo)
+	local neighbour = memory.read_s32_be(linkageList)
+	local dist
+	while neighbour >= 0 do
+		-- Convert index to pad to pad number
+		neighbour = padStart + 0x10 * neighbour
+		neighbour = PadData:get_value(neighbour, "number")
+
+		dist = distSqToPad(actorPos, neighbour, somePadInfo)
+		if (dist < shortestDist) then
+			shortestDist = dist
+			padNum = neighbour
+		end
+		
+		linkageList = linkageList + 4
+		neighbour = memory.read_s32_be(linkageList)
+	end
+	
+	return padNum
+end
 
 
 -- Tile data
@@ -60,6 +222,8 @@ TileData.metadata = {
 	-- 6 on frigate door to engine bomb
 	-- 8 linking to clipping linking the pipes
 	-- 9 in B1 up by the glass with the camera, because of the stairs
+
+
 }
 
 function TileData.get_point_count(addr)
@@ -83,7 +247,7 @@ function TileData.get_points(addr, scale)
 	return pnts
 end
 
-function TileData.get_tileData_start()
+function TileData.get_start_address()
 	return mainmemory.read_u32_be(0x040F58)
 end
 
@@ -91,7 +255,7 @@ function TileData.get_first_tile_address()
 	-- Precisely skips a list of 31 pointers and a 00000000
 	-- This is in 0x040F5C
 	ptr = mainmemory.read_u32_be(0x040F5C)
-	assert(ptr == (TileData.get_tileData_start() + 0x80), "Assertion failed")
+	assert(ptr == (TileData.get_start_address() + 0x80), "Assertion failed")
 	return ptr
 	
 end
@@ -102,8 +266,8 @@ function TileData.get_last_tile_address()
 end
 
 function TileData.get_links(addr)
-	-- Returns [point_count] tile addresses, replacing links to the 'null tile' with a nullptr
-	local tileDataStart = TileData.get_tileData_start() - 0x80000000
+	-- These links are addresses :) 
+	local tileDataStart = TileData.get_start_address() - 0x80000000
 	local function tget(prop)
 		return TileData:get_value(addr, prop)
 	end
@@ -123,13 +287,11 @@ function TileData.get_links(addr)
 end
 
 function TileData.get_size(addr)
-	-- Gets the actual size
 	return 0x8 * (TileData.get_point_count(addr) + 1)
 end
 
 function TileData.getAllTiles()	
 	-- Find all the tiles
-	-- This will include some wacky ones which are disconnected from the main area
 	local allAddrs = {}
 	local haveSeen = {}
 	haveSeen[0] = true
@@ -163,7 +325,8 @@ function TileData.getBoundary(tiles, isExternal)
 	local boundary = {}
 	for _, A_addr in ipairs(tiles) do
 		local pnts = TileData.get_points(A_addr, GameData.get_scale())
-		pnts[table.getn(pnts) + 1] = pnts[1] 	-- for ease
+		-- for ease
+		pnts[table.getn(pnts) + 1] = pnts[1]
 		for i, neighbour_addr in ipairs(TileData.get_links(A_addr)) do
 			if (neighbour_addr ~= 0 and isExternal(neighbour_addr)) then
 				table.insert(boundary, {pnts[i], pnts[i+1]})
@@ -172,4 +335,20 @@ function TileData.getBoundary(tiles, isExternal)
 	end
 
 	return boundary
+end
+
+
+-- Pad data
+PadData = Data.create()
+
+PadData.size = 0x10
+PadData.metadata = {
+	{["offset"] = 0x00, ["size"] = 0x4, ["type"] = "signed",	["name"] = "number"},
+	{["offset"] = 0x04, ["size"] = 0x4, ["type"] = "hex",	["name"] = "linkageList"}, -- indices, not IDs
+	{["offset"] = 0x08, ["size"] = 0x4, ["type"] = "unsigned", 	["name"] = "setIndex"},
+	{["offset"] = 0x0C, ["size"] = 0x4, ["type"] = "signed", 	["name"] = "dist_tmp"},
+}
+
+function PadData.get_start_address()
+	return memory.read_u32_be(0x75d00) - 0x80000000
 end
