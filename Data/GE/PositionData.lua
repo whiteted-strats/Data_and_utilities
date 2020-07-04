@@ -137,6 +137,8 @@ function PositionData.getNearPad(posDataAddr)
 	-- See if this tile has some pad, and also prep our efficient predicate
 	local padOnTile = {}
 
+
+
 	local currPad = memory.read_u32_be(0x075d00) - 0x80000000 - PadData.size
 	local padNum
 	local assocTile = -1
@@ -151,7 +153,7 @@ function PositionData.getNearPad(posDataAddr)
 		assocTile = memory.read_u32_be(somePadInfo + (0x2c * padNum) + 0x28)
 		padOnTile[assocTile] = currPad
 	end
-
+	
 
 	-- If we didn't find a pad on our tile, we did prep 'padOnTile'
 	-- So perform our BFS with a decent predicate
@@ -192,6 +194,147 @@ function PositionData.getNearPad(posDataAddr)
 	return padNum
 end
 
+
+
+local function FUN_7f03d9ec(posDataAddr)	-- likely only doors' position data
+
+	local objDataPtr = PositionData:get_value(posDataAddr, "object_data_pointer") - 0x80000000
+	local odp_b4 = memory.readfloat(objDataPtr + 0xb4, true)	-- 'displacement percentage'
+	local odp_84 = memory.readfloat(objDataPtr + 0x84, true)	-- max 'displacement percentage'
+	local odp_0c = memory.read_u32_be(objDataPtr + 0xc)
+	local rtn
+
+	if (odp_b4 <= 0) then
+		rtn = 0x1000
+	else
+		rtn = 0x4000
+		if (odp_84 <= odp_b4) then
+			rtn = 0x2000
+		end
+	end
+	if (bit.band(odp_0c, 0x20000000)) then
+		rtn = rtn + 0x8000	-- easier than |
+	end
+	return rtn
+end
+
+function PositionData.checkFlags(posDataAddr, flags)
+
+	-- Exact port of 7f03da50
+	-- Used to filter which objects to consider for collision when looking for doors for guards to open
+	--   flags = 0x5000
+    local flagsSubset
+	
+	local bool = true
+	local rtn = true
+	local objType = PositionData:get_value(posDataAddr, "object_type")
+	local objDataPtr = PositionData:get_value(posDataAddr, "object_data_pointer") - 0x80000000
+	
+	if (objType == 0x02) then	-- presumably door
+
+		-- Original test (*(int *)(posData->object_data + 8) << 5 < 0)
+		--   i.e. testing the bit 5 from the msb. We're distrustful of lua
+		-- bit.band(bit.lshift(memory.read_u32_be(objDataPtr + 8), 5), 0x80000000)
+		local masked = bit.band(memory.read_u32_be(objDataPtr + 8), 0x04000000)
+
+        if ((bit.band(flags, 0x100) ~= 0) and (masked ~= 0)) then
+            bool = false
+		end
+        if (bit.band(flags, 2) ~= 0) then
+            return bool
+		end
+        flagsSubset = FUN_7f03d9ec(posDataAddr)
+        flagsSubset = bit.band(flagsSubset, flags)
+		rtn = bool
+		
+	else
+		-- if flags = 0x5000, always return false on this path
+
+        flagsSubset = bit.band(flags, 4)
+        if (objType ~= 0x06) then
+            if (objType == 0x03) then
+                flagsSubset = bit.band(flags, 8)
+            
+            else 
+				rtn = true
+				local odp_08 = memory.read_u32_be(objDataPtr + 8)
+				local masked = bit.band(odp_08, 0x04000000)
+				if (bit.band(flags, 0x100) ~= 0) then
+					rtn = true
+					if (masked) then
+						rtn = false
+					end
+				end
+				
+				-- original test -1 < (int)(odp_08 << 0xe)
+				local masked_2 = bit.band(odp_08, 0x00020000) == 0
+                if ((bit.band(flags, 0x200) ~= 0) and masked_2) then
+                    rtn = false
+				end
+                flagsSubset = bit.band(flags, 1)
+                if (bit.band(odp_08, 0x800) ~= 0) then
+                    flagsSubset = bit.band(flags, 0x10)
+				end
+            end
+        end
+	end
+
+    if (flagsSubset == 0) then
+        rtn = false
+	end
+    return rtn
+end
+
+
+-- Port of 7f03e3fc
+-- "populate_80069c30_using_rooms(int *roomList)"
+-- Returns what would be in 0x80069c30, a list of positionDatas, except:
+--	a) we break it down by room
+--	b) we return position data pointers rather than indices
+function PositionData.getCollidablesInRooms(roomList)
+	local DAT_80071618 = memory.read_u32_be(0x071618) - 0x80000000
+	local DAT_8007161c = memory.read_u32_be(0x07161c) - 0x80000000
+	local link, index, roomLoopValue
+	local seen = {}
+	local output = {}
+
+	local posDataStart = PositionData.get_start_address()
+
+	-- Outer loop over rooms
+	for _, room in ipairs(roomList) do
+		output[room] = {}
+		link = memory.read_s16_be(DAT_80071618 + room * 2)
+
+		-- Middle loop over the chunks of values
+		while (link >= 0) do
+			index = 0
+
+			-- Inner loop through the chunk of up to 15 values
+			repeat
+				roomLoopValue = memory.read_s16_be(DAT_8007161c + link * 0x20 + index)
+				index = index + 2
+
+				if (-1 < roomLoopValue) then
+					
+					-- Add it if it is new
+					if (seen[roomLoopValue] == nil) then
+						seen[roomLoopValue] = true
+						table.insert(output[room], posDataStart + PositionData.size * roomLoopValue)
+					end
+				end
+			until (index == 0x1e)
+			
+			-- Go to the next chunk for this room
+			link = memory.read_s16_be(DAT_8007161c + link * 0x20 + 0x1e)
+		end
+	end
+
+	return output
+end
+
+function PositionData.get_start_address()
+	return 0x069c38			-- no need to read :) 
+end
 
 -- Tile data
 TileData = Data.create()
