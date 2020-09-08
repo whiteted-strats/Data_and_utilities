@@ -3,6 +3,8 @@ require "Data\\GE\\GameData"
 
 -- Now including tile & pad data.. for now
 
+TileData = Data.create()
+
 PositionData = Data.create()
 
 PositionData.size = 0x34
@@ -125,19 +127,15 @@ local function cleanerTileBFS(sourceTile, predicate)
 end
 
 
+PositionData.nearPadAfterTileWalk = nil
 
-
--- Mimicing 7f027cd4, tile -> pad (-> BFS) -> closest of this & it's neighbour
--- Except we've visited https://en.wikipedia.org/wiki/Breadth-first_search in our lifetime
-function PositionData.getNearPad(posDataAddr)
-	local tile = PositionData:get_value(posDataAddr, "tile_pointer")
+function TileData.getPrelimNearPad(tile)
 	local somePadInfo = memory.read_u32_be(0x075d18) - 0x80000000
-	local padStart = PadData.get_start_address()
 
+	tile = tile + 0x80000000
+	
 	-- See if this tile has some pad, and also prep our efficient predicate
 	local padOnTile = {}
-
-
 
 	local currPad = memory.read_u32_be(0x075d00) - 0x80000000 - PadData.size
 	local padNum
@@ -151,14 +149,19 @@ function PositionData.getNearPad(posDataAddr)
 		end
 
 		assocTile = memory.read_u32_be(somePadInfo + (0x2c * padNum) + 0x28)
-		padOnTile[assocTile] = currPad
+
+		-- only store the first, since they repeat this searching process each time
+		-- on b1, 0062 and 0041 have the same tile (and are the same point)
+		if (padOnTile[assocTile] == nil) then
+			padOnTile[assocTile] = currPad
+		end
 	end
-	
 
 	-- If we didn't find a pad on our tile, we did prep 'padOnTile'
 	-- So perform our BFS with a decent predicate
 	if padNum < 0 then
 		local function efficientPredicate(t)
+			--console.log(("Predicate with 0x%X"):format(t + 0x80000000))
 			return padOnTile[t + 0x80000000] ~= nil
 		end
 
@@ -169,7 +172,23 @@ function PositionData.getNearPad(posDataAddr)
 		padNum = PadData:get_value(currPad, "number")
 	end
 
+	return currPad
+end
+
+-- Mimicing 7f027cd4, tile -> pad (-> BFS) -> closest of this & it's neighbour
+-- Except we've visited https://en.wikipedia.org/wiki/Breadth-first_search in our lifetime
+function PositionData.getNearPad(posDataAddr)
+	local tile = PositionData:get_value(posDataAddr, "tile_pointer")
+	local somePadInfo = memory.read_u32_be(0x075d18) - 0x80000000
+	local padStart = PadData.get_start_address()
+
+	local currPad = TileData.getPrelimNearPad(tile - 0x80000000)
+	local padNum = PadData:get_value(currPad, "number")
+
+	PositionData.nearPadAfterTileWalk = padNum
+
 	-- Find which of this pad and it's neighbours are closest
+	-- Except it's BUGGED - we don't update the new lowest distance
 	local actorPos = PositionData:get_value(posDataAddr, "position")
 	local linkageList = PadData:get_value(currPad, "linkageList") - 0x80000000
 
@@ -183,7 +202,7 @@ function PositionData.getNearPad(posDataAddr)
 
 		dist = distSqToPad(actorPos, neighbour, somePadInfo)
 		if (dist < shortestDist) then
-			shortestDist = dist
+			--shortestDist = dist	-- na don't need this thanks mate
 			padNum = neighbour
 		end
 		
@@ -337,7 +356,6 @@ function PositionData.get_start_address()
 end
 
 -- Tile data
-TileData = Data.create()
 
 TileData.size = 0x20	-- if 3 points, can be up to 15 (9 seen)
 TileData.metadata = {
@@ -374,6 +392,9 @@ function TileData.get_point_count(addr)
 end
 
 function TileData.get_points(addr, scale)
+	if scale == nil then
+		scale = GameData.get_scale()
+	end
 	local function tget(prop)
 		return TileData:get_value(addr, prop)
 	end
@@ -494,4 +515,47 @@ PadData.metadata = {
 
 function PadData.get_start_address()
 	return memory.read_u32_be(0x75d00) - 0x80000000
+end
+
+function PadData.find_pad_by_number(padNum)
+	local padPtr = PadData.get_start_address()
+	local n = -2
+	while (n ~= -1) do
+		n = PadData:get_value(padPtr, "number")
+		if (n == padNum) then
+			return padPtr
+		end
+
+		padPtr = padPtr + 0x10
+	end
+end
+
+function PadData.padPosFromNum(padNum)
+	local somePadInfo = memory.read_u32_be(0x075d18) - 0x80000000
+	local padPos = {
+		x = memory.readfloat(somePadInfo + (0x2c * padNum) + 0x0, true),
+		z = memory.readfloat(somePadInfo + (0x2c * padNum) + 0x8, true),
+	}
+	return padPos
+end
+
+function PadData.get_pad_neighbours(padPtr)
+	local padStart = PadData.get_start_address()
+	local linkageList = PadData:get_value(padPtr, "linkageList") - 0x80000000
+
+	local neighbourIndex = -1
+	local i = 0
+	local nns = {}
+	while true do
+		neighbourIndex = memory.read_s32_be(linkageList + i * 0x4)
+		if neighbourIndex == -1 then
+			break
+		end
+
+		table.insert(nns, PadData:get_value(padStart + 0x10 * neighbourIndex, "number"))
+
+		i = i + 1
+	end
+
+	return nns
 end

@@ -21,18 +21,31 @@ GuardData.metadata =
 	{["offset"] = 0x010, ["size"] = 0x1, ["type"] = "unsigned", ["name"] = "belligerency"},
 	{["offset"] = 0x018, ["size"] = 0x4, ["type"] = "hex", 		["name"] = "position_data_pointer"},
 	{["offset"] = 0x01C, ["size"] = 0x4, ["type"] = "hex", 		["name"] = "model_data_pointer"},	
-	{["offset"] = 0x024, ["size"] = 0x4, ["type"] = "float", 	["name"] = "collision_radius"},	
+	{["offset"] = 0x024, ["size"] = 0x4, ["type"] = "float", 	["name"] = "collision_radius"},
+
 	{["offset"] = 0x02C, ["size"] = 0x4, ["type"] = "unsigned", ["name"] = "fadeout_timer"},
-	{["offset"] = 0x02C, ["size"] = 0xC, ["type"] = "vector", 	["name"] = "bond_position"},
+	{["offset"] = 0x02C, ["size"] = 0xC, ["type"] = "vector", 	["name"] = "bond_position"},	-- union?
 	{["offset"] = 0x03C, ["size"] = 0xC, ["type"] = "vector", 	["name"] = "path_target_position"},
 
-	-- Various movement data
-	{["offset"]= 0x05c, ["size"] = 0x1, ["type"] = "hex", 		["name"] = "moving_flags"},
+	-- =============================================================================================
+	-- Chasing/Path-Walking data (0x38 in size)
+	{["offset"]= 0x05c, ["size"] = 0x1, ["type"] = "hex", 		["name"] = "motion_stage"},
+	{["offset"]= 0x05d, ["size"] = 0x1, ["type"] = "unsigned", 	["name"] = "fail_count"},
+	{["offset"]= 0x05e, ["size"] = 0x1, ["type"] = "hex", 		["name"] = "normal_target_set"},
+	{["offset"]= 0x05f, ["size"] = 0x1, ["type"] = "hex", 		["name"] = "local_target_set"},
 	{["offset"] = 0x060, ["size"] = 0xC, ["type"] = "vector", 	["name"] = "target_position"},
+
+	{["offset"] = 0x06c, ["size"] = 0xC, ["type"] = "vector", 	["name"] = "nav_tile_pos_a"},
+	-- ! overlap here, a union but I don't know the first unloaded member
 	{["offset"] = 0x070, ["size"] = 0x4, ["type"] = "float", 	["name"] = "path_segment_coverage"},
 	{["offset"] = 0x074, ["size"] = 0x4, ["type"] = "float", 	["name"] = "path_segment_length"},
-	{["offset"] = 0x084, ["size"] = 0x4, ["type"] = "unsigned", 	["name"] = "chase_timer"},
-	
+
+	{["offset"] = 0x078, ["size"] = 0xC, ["type"] = "vector",	["name"] = "nav_tile_pos_b"},
+	{["offset"] = 0x084, ["size"] = 0x4, ["type"] = "unsigned", ["name"] = "chase_timer"},
+	{["offset"] = 0x088, ["size"] = 0xC, ["type"] = "vector",	["name"] = "local_target_position"},
+	-- -> 0x94)
+	-- =============================================================================================
+
 	{["offset"] = 0x094, ["size"] = 0x4, ["type"] = "float", 	["name"] = "segment_coverage"},
 	{["offset"] = 0x098, ["size"] = 0x4, ["type"] = "float", 	["name"] = "segment_length"},
 	{["offset"] = 0x09C, ["size"] = 0x4, ["type"] = "unsigned",	["name"] = "last_moving_visible_time"},
