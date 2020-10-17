@@ -419,7 +419,7 @@ function TileData.get_first_tile_address()
 	-- Precisely skips a list of 31 pointers and a 00000000
 	-- This is in 0x040F5C
 	ptr = mainmemory.read_u32_be(0x040F5C)
-	assert(ptr == (TileData.get_start_address() + 0x80), "Assertion failed")
+	assert(ptr == (TileData.get_start_address() + 0x80), "Tile data looks bad")
 	return ptr
 	
 end

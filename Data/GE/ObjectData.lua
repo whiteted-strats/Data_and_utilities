@@ -1,4 +1,5 @@
 require "Data\\Data"
+require "Data\\GE\\PositionData"
 
 DoorData = Data.create()
 
@@ -11,10 +12,11 @@ DoorData.metadata =
 	{["offset"] = 0x0C, ["size"] = 0x4, ["type"] = "float", 	["name"] = "acceleration"},
 	{["offset"] = 0x10, ["size"] = 0x4, ["type"] = "float", 	["name"] = "rate"},
 	{["offset"] = 0x14, ["size"] = 0x4, ["type"] = "float", 	["name"] = "max_speed"},
+	{["offset"] = 0x1A, ["size"] = 0x2, ["type"] = "unsigned",	["name"] = "hinge_type"},
 	{["offset"] = 0x1C, ["size"] = 0x4, ["type"] = "bitfield", 	["name"] = "lock"},
-	{["offset"] = 0x20, ["size"] = 0x4, ["type"] = "unsigned", 	["name"] = "max_open_time"},
+	{["offset"] = 0x20, ["size"] = 0x4, ["type"] = "unsigned", 	["name"] = "max_open_time"},	-- A0
 	{["offset"] = 0x28, ["size"] = 0x4, ["type"] = "float", 	["name"] = "max_displacement"},
-	{["offset"] = 0x34, ["size"] = 0x4, ["type"] = "float", 	["name"] = "displacement_percentage"},
+	{["offset"] = 0x34, ["size"] = 0x4, ["type"] = "float", 	["name"] = "displacement_percentage"},	-- important, 0xB4
 	{["offset"] = 0x38, ["size"] = 0x4, ["type"] = "float", 	["name"] = "speed_percentage"},
 	{["offset"] = 0x3C, ["size"] = 0x1, ["type"] = "enum", 		["name"] = "state"},
 	-- Confirmed looking at the individual levels. Double doors are 2 linked doors,
@@ -26,6 +28,82 @@ DoorData.metadata =
 	{["offset"] = 0x6C, ["size"] = 0x4, ["type"] = "unsigned", 	["name"] = "opened_time"},
 	{["offset"] = 0x7C, ["size"] = 0x4, ["type"] = "unsigned", 	["name"] = "timer"}
 }
+
+
+local dimension_mnemonics = {"x", "y", "z", "w"}
+
+function read_vector_directly(address, size)
+	local vector = {}	
+	
+	for i = 1, size, 1 do
+		local offset = (i - 1) * 0x04
+		vector[dimension_mnemonics[i]] = mainmemory.readfloat(address + offset, true)
+	end
+	
+	return vector
+end
+
+function doorDataGetHinge(door_address)
+	memory.usememorydomain("RDRAM")
+
+	-- In progress
+	local hinge_type = DoorData:get_value(door_address, "hinge_type")
+
+	if ((hinge_type == 5) or (hinge_type == 9)) then
+		local preset = DoorData:get_value(door_address, "preset")
+
+		local presetDataPtr = (memory.read_u32_be(0x075d1c) - 0x80000000) + 0x44 * preset
+
+		local pA = read_vector_directly(presetDataPtr, 3)
+		local pB = read_vector_directly(presetDataPtr + 0xc, 3)
+		local pC = read_vector_directly(presetDataPtr + 0x18, 3)
+		local scale_z = memory.readfloat(presetDataPtr + 0x34, true)
+		local scale_y = memory.readfloat(presetDataPtr + 0x30, true)
+		local scale_x = memory.readfloat(presetDataPtr + 0x2c, true)
+
+		local flags = DoorData:get_value(door_address, "flags_1")
+		local flag_3_set = (bit.rshift(flags, 29) == 1)
+		local doorPosition = DoorData:get_value(door_address, "position")
+
+		local minors = {}
+		local newPos = {}
+		local offset = {}
+
+		minors.x = (pB).y * (pC).z - (pC).y * (pB).z
+		minors.y = (pB).z * (pC).x - (pC).z * (pB).x
+		minors.z = (pB).x * (pC).y - (pC).x * (pB).y
+		newPos.x = (pB).x * scale_z + (pA).x
+		newPos.y = (pB).y * scale_z + (pA).y
+		newPos.z = (pB).z * scale_z + (pA).z
+		
+		if (hinge_type == 9) then
+			newPos.x = newPos.x + minors.x * scale_y
+			newPos.y = newPos.y + minors.y * scale_y
+			newPos.z = newPos.z + minors.z * scale_y
+		else
+			if (flag_3_set) then
+				newPos.x = newPos.x + minors.x * scale_y
+				newPos.y = newPos.y + minors.y * scale_y
+				newPos.z = newPos.z + minors.z * scale_y
+			else
+				newPos.x = newPos.x + minors.x * scale_x
+				newPos.y = newPos.y + minors.y * scale_x
+				newPos.z = newPos.z + minors.z * scale_x
+			end
+		end
+
+		offset.x = (doorPosition).x - newPos.x
+		offset.y = (doorPosition).y - newPos.y
+		offset.z = (doorPosition).z - newPos.z
+
+		return newPos -- offset
+
+		-- We're at the call to copy matrix in 7f0526ec
+	end
+
+	return nil
+end
+
 
 DoorScaleData = Data.create()
 
