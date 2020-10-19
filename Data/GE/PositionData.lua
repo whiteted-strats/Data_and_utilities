@@ -534,6 +534,7 @@ function PadData.padPosFromNum(padNum)
 	local somePadInfo = memory.read_u32_be(0x075d18) - 0x80000000
 	local padPos = {
 		x = memory.readfloat(somePadInfo + (0x2c * padNum) + 0x0, true),
+		y = memory.readfloat(somePadInfo + (0x2c * padNum) + 0x4, true),	-- addition, but surely?
 		z = memory.readfloat(somePadInfo + (0x2c * padNum) + 0x8, true),
 	}
 	return padPos

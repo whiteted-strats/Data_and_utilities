@@ -1,6 +1,8 @@
 Data = {}
 Data.__index = Data
 
+memory.usememorydomain("RDRAM")	-- always runs
+
 function Data.create()
 	local data = {}
 	

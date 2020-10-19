@@ -1,5 +1,46 @@
 require "Data\\Data"
 require "Data\\GE\\PositionData"
+require "HUD_Matt\\HUD_matt_lib"	-- matrixFromMainMemory, applyHomMatrix, vectorAdd
+
+local dimension_mnemonics = {"x", "y", "z", "w"}
+
+-- Putting code here for getting preset bounds
+function getPresetPoints(objAddr)
+    -- Transform at 0x18 - rotation and scale
+    local T = matrixFromMainMemory(objAddr+0x18)
+    local pos = PhysicalObjectData:get_value(objAddr, "position")
+
+    -- I've seen this in code since, but originally I found this by memory watching :) 
+    local mdp = mainmemory.read_u32_be(objAddr + 0x14) - 0x80000000
+    local a = mainmemory.read_u32_be(mdp + 0x8) - 0x80000000
+	local b = mainmemory.read_u32_be(a) - 0x80000000
+    local c = mainmemory.read_u32_be(b + 0x14) - 0x80000000
+    local d = mainmemory.read_u32_be(c + 0x4) - 0x80000000
+	local scalesPointer = d + 4
+	
+	local extremes = {}
+	for i=0,1,1 do
+		local pnt = {}
+		for j=1,3,1 do
+			pnt[dimension_mnemonics[j]] = mainmemory.readfloat(scalesPointer + i*4 + (j-1)*8, true)
+		end
+
+		table.insert(extremes, pnt)
+	end
+
+	local xs = {1,1,2,2}
+	local zs = {1,2,2,1}
+	local rtns = {}
+	for i=1,4,1 do
+		local pnt = {x=extremes[xs[i]].x, y=extremes[1].y, z=extremes[zs[i]].z}
+		local pnt2 = applyHomMatrix(pnt, T)
+		local pnt3 = vectorAdd(pos, pnt2)
+		table.insert(rtns, pnt3)
+	end
+
+	return rtns
+end
+
 
 DoorData = Data.create()
 
@@ -29,9 +70,6 @@ DoorData.metadata =
 	{["offset"] = 0x7C, ["size"] = 0x4, ["type"] = "unsigned", 	["name"] = "timer"}
 }
 
-
-local dimension_mnemonics = {"x", "y", "z", "w"}
-
 function read_vector_directly(address, size)
 	local vector = {}	
 	
@@ -44,9 +82,7 @@ function read_vector_directly(address, size)
 end
 
 function doorDataGetHinge(door_address)
-	memory.usememorydomain("RDRAM")
-
-	-- In progress
+	-- Supported for 5 and 9 now - doesn't include doors which swing both ways
 	local hinge_type = DoorData:get_value(door_address, "hinge_type")
 
 	if ((hinge_type == 5) or (hinge_type == 9)) then
