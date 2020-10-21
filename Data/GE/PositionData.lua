@@ -560,3 +560,53 @@ function PadData.get_pad_neighbours(padPtr)
 
 	return nns
 end
+
+
+
+-- Set (groups of pads) data
+SetData = Data.create()
+
+SetData.size = 0x0C
+
+SetData.metadata = {
+	{["offset"] = 0x00, ["size"] = 0x4, ["type"] = "hex",	["name"] = "linkageList"},
+	{["offset"] = 0x04, ["size"] = 0x4, ["type"] = "hex", 	["name"] = "padList"},
+	{["offset"] = 0x08, ["size"] = 0x4, ["type"] = "signed", 	["name"] = "dist_tmp"},
+}
+
+function SetData.get_start_address()
+	return memory.read_u32_be(0x75d04) - 0x80000000
+end
+
+function SetData.get_set_neighbours(setPtr)
+	local linkageList = SetData:get_value(setPtr, "linkageList")
+	if linkageList == 0 then
+		return nil
+	end
+
+	-- A generic list reader might be a good idea
+	linkageList = linkageList - 0x80000000
+	local neighbours = {}
+	while true do
+		local index = mainmemory.read_s32_be(linkageList)
+		if index == -1 then
+			return neighbours
+		end
+		table.insert(neighbours, index)
+		linkageList = linkageList + 4
+	end
+end
+
+function SetData.get_set_pads(setPtr)
+	local padList = SetData:get_value(setPtr, "padList") - 0x80000000
+
+	local pads = {}
+	while true do
+		local index = mainmemory.read_s32_be(padList)
+		if index == -1 then
+			return pads
+		end
+		table.insert(pads, index)
+		padList = padList + 4
+	end
+end
