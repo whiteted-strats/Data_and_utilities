@@ -356,6 +356,7 @@ BodyArmorData.type = 0x15
 BodyArmorData.size = 0x08
 BodyArmorData.metadata =
 {
+	{["offset"] = 0x4, ["size"] = 0x4, ["type"] = "float", 	["name"] = "amount"},
 }
 
 TagData = Data.create()
@@ -564,4 +565,61 @@ function ObjectData.get_data(_object_address)
 	local object_type = ObjectData.get_type(_object_address)
 
 	return ObjectData.data_types[object_type]
+end
+
+
+-- Pickups code
+
+function ObjectData.getAllCollectables()
+	-- Outer loop from 7f03d0d4
+	local relPosData = memory.read_u32_be(0x30aa0)
+	local isCollectible = {}
+
+	while relPosData ~= 0 do
+		relPosData = relPosData - 0x80000000
+
+		local collectible = false
+
+		local field_2 = memory.read_s16_be(relPosData + 0x2)	-- not yet named
+		local objClass = PositionData:get_value(relPosData, "object_type")
+		if field_2 < 1 and (objClass == 1 or objClass == 4) then
+			-- From 7f0506dc
+			local objPtr = PositionData:get_value(relPosData, "object_data_pointer") - 0x80000000
+			local objType = ObjectData.get_type(objPtr)
+
+			-- Key, Ammo, Weapon, AmmoBox or BodyArmour (hat omitted seperately)
+			local flags_1 = PhysicalObjectData:get_value(objPtr, "flags_1")
+
+			if not (objType == 0x04 or objType == 0x07 or objType == 0x08 or objType == 0x14 or objType == 0x15) then
+				local flag = bit.band(bit.rshift(flags_1, 31 - 0xd), 1)
+				collectible = (flag == 1)
+			else
+				local flag = bit.band(bit.rshift(flags_1, 31 - 0xb), 1)
+				collectible = (flag == 0)
+			end
+
+			local flag = bit.band(bit.rshift(flags_1, 31 - 0xc), 1)
+			collectible = collectible and (flag == 0)
+
+			-- [Motion checks and strange list checks ignored here]
+
+			-- [Further specific tests here - i.e. checking you don't have max ammo]
+			-- => BA one is bizarre, you can't have more armour than you are picking up.
+			--    So you can always pick up a 100%, but must be under 50% to pick up a 50%
+			
+			-- Then to pick anything up you must be looking no more than 45 degrees down,
+			--  inside 1 metre in XZ, and within 2 metres in Y
+			-- There is a condition on the player which makes this 3.5m and 5m, but I assume it doesn't happen normally
+			-- If obj.flags_2 & 0x1000 == 0, you also need a line of sight on it (over clipping)
+			-- Use PhysicalObject's position.
+			if collectible then
+				isCollectible[objPtr] = true	-- could put whether it's extreme here
+			end
+		end
+
+		-- Step backwards
+		relPosData = PositionData:get_value(relPosData, "prev_entry_pointer")
+	end
+
+	return isCollectible
 end
