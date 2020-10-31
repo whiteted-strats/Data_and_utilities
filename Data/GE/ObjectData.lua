@@ -81,8 +81,11 @@ function read_vector_directly(address, size)
 	return vector
 end
 
+-- TODO : add preset data as a seperate file, move this in there.
+
 function doorDataGetHinge(door_address)
-	-- Supported for 5 and 9 now - doesn't include doors which swing both ways
+	-- Supported for 5 and 9 now
+	-- We also need to get the direction working okay
 	local hinge_type = DoorData:get_value(door_address, "hinge_type")
 
 	if ((hinge_type == 5) or (hinge_type == 9)) then
@@ -91,40 +94,43 @@ function doorDataGetHinge(door_address)
 		local presetDataPtr = (memory.read_u32_be(0x075d1c) - 0x80000000) + 0x44 * preset
 
 		local pA = read_vector_directly(presetDataPtr, 3)
-		local pB = read_vector_directly(presetDataPtr + 0xc, 3)
-		local pC = read_vector_directly(presetDataPtr + 0x18, 3)
-		local scale_z = memory.readfloat(presetDataPtr + 0x34, true)
-		local scale_y = memory.readfloat(presetDataPtr + 0x30, true)
-		local scale_x = memory.readfloat(presetDataPtr + 0x2c, true)
+		local normal_x = read_vector_directly(presetDataPtr + 0xc, 3)
+		local normal_y = read_vector_directly(presetDataPtr + 0x18, 3)
+		local low_x = memory.readfloat(presetDataPtr + 0x34, true)
+		local high_z = memory.readfloat(presetDataPtr + 0x30, true)
+		local low_z = memory.readfloat(presetDataPtr + 0x2c, true)
 
 		local flags = DoorData:get_value(door_address, "flags_1")
 		local flag_3_set = (bit.rshift(flags, 29) == 1)
 		local doorPosition = DoorData:get_value(door_address, "position")
 
-		local minors = {}
+		local normal_z = {}
 		local newPos = {}
 		local offset = {}
 
-		minors.x = (pB).y * (pC).z - (pC).y * (pB).z
-		minors.y = (pB).z * (pC).x - (pC).z * (pB).x
-		minors.z = (pB).x * (pC).y - (pC).x * (pB).y
-		newPos.x = (pB).x * scale_z + (pA).x
-		newPos.y = (pB).y * scale_z + (pA).y
-		newPos.z = (pB).z * scale_z + (pA).z
+		normal_z.x = (normal_x).y * (normal_y).z - (normal_y).y * (normal_x).z
+		normal_z.y = (normal_x).z * (normal_y).x - (normal_y).z * (normal_x).x
+		normal_z.z = (normal_x).x * (normal_y).y - (normal_y).x * (normal_x).y
+		newPos.x = (normal_x).x * low_x + (pA).x
+		newPos.y = (normal_x).y * low_x + (pA).y
+		newPos.z = (normal_x).z * low_x + (pA).z
 		
 		if (hinge_type == 9) then
-			newPos.x = newPos.x + minors.x * scale_y
-			newPos.y = newPos.y + minors.y * scale_y
-			newPos.z = newPos.z + minors.z * scale_y
+			-- type 9, always has high z
+			newPos.x = newPos.x + normal_z.x * high_z
+			newPos.y = newPos.y + normal_z.y * high_z
+			newPos.z = newPos.z + normal_z.z * high_z
 		else
+			-- type 5, might be able to swing both ways?
+			-- May need to return both.
 			if (flag_3_set) then
-				newPos.x = newPos.x + minors.x * scale_y
-				newPos.y = newPos.y + minors.y * scale_y
-				newPos.z = newPos.z + minors.z * scale_y
+				newPos.x = newPos.x + normal_z.x * high_z
+				newPos.y = newPos.y + normal_z.y * high_z
+				newPos.z = newPos.z + normal_z.z * high_z
 			else
-				newPos.x = newPos.x + minors.x * scale_x
-				newPos.y = newPos.y + minors.y * scale_x
-				newPos.z = newPos.z + minors.z * scale_x
+				newPos.x = newPos.x + normal_z.x * low_z
+				newPos.y = newPos.y + normal_z.y * low_z
+				newPos.z = newPos.z + normal_z.z * low_z
 			end
 		end
 
@@ -365,10 +371,26 @@ TagData.type = 0x16
 TagData.size = 0x10
 TagData.metadata =
 {
-	{["offset"] = 0x04, ["size"] = 0x2, ["type"] = "hex", 	["name"] = "object_number"},
+	{["offset"] = 0x04, ["size"] = 0x2, ["type"] = "signed", 	["name"] = "object_number"},
 	{["offset"] = 0x08, ["size"] = 0x4, ["type"] = "hex", 	["name"] = "previous_entry_pointer"},
 	{["offset"] = 0x0C, ["size"] = 0x4, ["type"] = "hex", 	["name"] = "tagged_object_pointer"}	
 }
+
+-- Ported from 7f057080
+function TagData.getObjectWithTag(tag)
+	currLink = mainmemory.read_u32_be(0x075d80)
+	while currLink ~= 0 do
+		currLink = currLink - 0x80000000
+		currTag = TagData:get_value(currLink, "object_number")
+		if currTag == tag then
+			return TagData:get_value(currLink, "tagged_object_pointer") - 0x80000000
+		end
+
+		currLink = TagData:get_value(currLink, "previous_entry_pointer")
+	end
+
+	return nil
+end
 
 ObjectiveData = Data.create()
 

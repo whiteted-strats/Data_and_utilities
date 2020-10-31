@@ -23,6 +23,7 @@ PositionData.metadata =
 {
 	{["offset"] = 0x00, ["size"] = 0x1, ["type"] = "hex", 		["name"] = "object_type"}, -- 03 guard
 	{["offset"] = 0x01, ["size"] = 0x1, ["type"] = "hex", 		["name"] = "flags"}, -- #2 = Visible, #4 = Active
+	--{["offset"] = 0x02, ["size"] = 0x2, ["type"] = "signed",	["name"] = "unknown"}	-- can't be picked up if > 0
 	{["offset"] = 0x04, ["size"] = 0x4, ["type"] = "hex", 		["name"] = "object_data_pointer"},
 	{["offset"] = 0x08, ["size"] = 0xC, ["type"] = "vector", 	["name"] = "position"},
 	{["offset"] = 0x14, ["size"] = 0x4, ["type"] = "hex", 		["name"] = "tile_pointer"},
@@ -350,6 +351,28 @@ function PositionData.getCollidablesInRooms(roomList)
 
 	return output
 end
+
+-- Port of 7f03cb8c
+function PositionData.readRoomList(posDataAddr)
+	local rooms = {}
+
+	if (PositionData:get_value("tile_pointer") == 0x0) then
+		return rooms
+	end
+
+	-- [Multiplayer code omitted]
+	
+	local roomPtr = posDataAddr + 0x2c
+	local room = mainmemory.read_s32_be(roomPtr)
+	while (room ~= -1) do
+		table.insert(rooms, room)
+		roomPtr = roomPtr + 4
+		room = mainmemory.read_s32_be(roomPtr)
+	end
+
+	return rooms
+end
+
 
 function PositionData.get_start_address()
 	return 0x069c38			-- no need to read :) 
