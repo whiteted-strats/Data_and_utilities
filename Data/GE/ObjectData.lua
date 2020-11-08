@@ -83,10 +83,12 @@ end
 
 -- TODO : add preset data as a seperate file, move this in there.
 
-function doorDataGetHinge(door_address)
-	-- Supported for 5 and 9 now
-	-- We also need to get the direction working okay
+function doorDataGetHinges(door_address)
+	-- Supported for door types 5 and 9 now
+	-- Direction should be working fine now
+	-- Ported from 7f0526ec
 	local hinge_type = DoorData:get_value(door_address, "hinge_type")
+	local hinges = {}
 
 	if ((hinge_type == 5) or (hinge_type == 9)) then
 		local preset = DoorData:get_value(door_address, "preset")
@@ -100,50 +102,60 @@ function doorDataGetHinge(door_address)
 		local high_z = memory.readfloat(presetDataPtr + 0x30, true)
 		local low_z = memory.readfloat(presetDataPtr + 0x2c, true)
 
+		-- Flag[2] is whether it opens backwards
+		-- Flag[4] is whether it opens away from the player
+		-- If [4] is set, it sets [2] dynamically. But [2] can still be set by itself.
 		local flags = DoorData:get_value(door_address, "flags_1")
-		local flag_3_set = (bit.rshift(flags, 29) == 1)
+		local openBackward = (bit.band(bit.rshift(flags, 29), 1) == 1)
+		local openAwayFromBond = (bit.band(bit.rshift(flags, 27), 1) == 1)
+
 		local doorPosition = DoorData:get_value(door_address, "position")
 
 		local normal_z = {}
-		local newPos = {}
+		local hingePos = {}
 		local offset = {}
 
 		normal_z.x = (normal_x).y * (normal_y).z - (normal_y).y * (normal_x).z
 		normal_z.y = (normal_x).z * (normal_y).x - (normal_y).z * (normal_x).x
 		normal_z.z = (normal_x).x * (normal_y).y - (normal_y).x * (normal_x).y
-		newPos.x = (normal_x).x * low_x + (pA).x
-		newPos.y = (normal_x).y * low_x + (pA).y
-		newPos.z = (normal_x).z * low_x + (pA).z
+		hingePos.x = (normal_x).x * low_x + (pA).x
+		hingePos.y = (normal_x).y * low_x + (pA).y
+		hingePos.z = (normal_x).z * low_x + (pA).z
 		
 		if (hinge_type == 9) then
 			-- type 9, always has high z
-			newPos.x = newPos.x + normal_z.x * high_z
-			newPos.y = newPos.y + normal_z.y * high_z
-			newPos.z = newPos.z + normal_z.z * high_z
+			hingePos.x = hingePos.x + normal_z.x * high_z
+			hingePos.y = hingePos.y + normal_z.y * high_z
+			hingePos.z = hingePos.z + normal_z.z * high_z
+			table.insert(hinges, hingePos)
 		else
-			-- type 5, might be able to swing both ways?
-			-- May need to return both.
-			if (flag_3_set) then
-				newPos.x = newPos.x + normal_z.x * high_z
-				newPos.y = newPos.y + normal_z.y * high_z
-				newPos.z = newPos.z + normal_z.z * high_z
-			else
-				newPos.x = newPos.x + normal_z.x * low_z
-				newPos.y = newPos.y + normal_z.y * low_z
-				newPos.z = newPos.z + normal_z.z * low_z
+			-- type 5, can swing both ways
+			-- this output order seems best
+			
+			if (openAwayFromBond or not openBackward) then
+				table.insert(hinges, {
+					["x"] = hingePos.x + normal_z.x * low_z,
+					["y"] = hingePos.y + normal_z.y * low_z,
+					["z"] = hingePos.z + normal_z.z * low_z,
+				})
 			end
+			
+			if (openAwayFromBond or openBackward) then
+				-- This one is used when flag_2 is set, which requires flag_4 to be set
+				table.insert(hinges, {
+					["x"] = hingePos.x + normal_z.x * high_z,
+					["y"] = hingePos.y + normal_z.y * high_z,
+					["z"] = hingePos.z + normal_z.z * high_z,
+				})
+			end
+			
 		end
 
-		offset.x = (doorPosition).x - newPos.x
-		offset.y = (doorPosition).y - newPos.y
-		offset.z = (doorPosition).z - newPos.z
-
-		return newPos -- offset
-
+		-- offset = doorPos - hingePos
 		-- We're at the call to copy matrix in 7f0526ec
 	end
 
-	return nil
+	return hinges
 end
 
 
