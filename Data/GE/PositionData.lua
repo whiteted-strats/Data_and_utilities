@@ -243,6 +243,7 @@ function PositionData.checkFlags(posDataAddr, flags)
 	-- Exact port of 7f03da50
 	-- Used to filter which objects to consider for collision when looking for doors for guards to open
 	--   flags = 0x5000
+	-- Also used by CMD 0x3C (line of sight) to look for collisions with flags = 0x11B
     local flagsSubset
 	
 	local bool = true
@@ -277,22 +278,24 @@ function PositionData.checkFlags(posDataAddr, flags)
             
             else 
 				rtn = true
-				local odp_08 = memory.read_u32_be(objDataPtr + 8)
-				local masked = bit.band(odp_08, 0x04000000)
+				local objFlags1 = memory.read_u32_be(objDataPtr + 8)
+				local masked = bit.band(objFlags1, 0x04000000)
 				if (bit.band(flags, 0x100) ~= 0) then
 					rtn = true
-					if (masked) then
+					if (masked ~= 0) then
 						rtn = false
 					end
 				end
 				
-				-- original test -1 < (int)(odp_08 << 0xe)
-				local masked_2 = bit.band(odp_08, 0x00020000) == 0
+				-- original test -1 < (int)(objFlags1 << 0xe)
+				local masked_2 = bit.band(objFlags1, 0x00020000) == 0
                 if ((bit.band(flags, 0x200) ~= 0) and masked_2) then
                     rtn = false
 				end
-                flagsSubset = bit.band(flags, 1)
-                if (bit.band(odp_08, 0x800) ~= 0) then
+				
+				flagsSubset = bit.band(flags, 1)
+				
+                if (bit.band(objFlags1, 0x800) ~= 0) then
                     flagsSubset = bit.band(flags, 0x10)
 				end
             end
