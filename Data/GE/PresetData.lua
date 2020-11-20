@@ -23,10 +23,10 @@ PresetData.metadata = {
 }
 
 function PresetData.get_start_address()
-	return memory.read_u32_be(PresetData.start_address) - 0x80000000
+	return mainmemory.read_u32_be(PresetData.start_address) - 0x80000000
 end
 function PresetData.get_end_address()
-	return memory.read_u32_be(PresetData.end_address) - 0x80000000 - 0x44
+	return mainmemory.read_u32_be(PresetData.end_address) - 0x80000000 - 0x44
 end
 
 function PresetData.getPresetAddrFromNum(preset_num)

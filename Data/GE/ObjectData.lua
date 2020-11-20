@@ -93,14 +93,14 @@ function doorDataGetHinges(door_address)
 	if ((hinge_type == 5) or (hinge_type == 9)) then
 		local preset = DoorData:get_value(door_address, "preset")
 
-		local presetDataPtr = (memory.read_u32_be(0x075d1c) - 0x80000000) + 0x44 * preset
+		local presetDataPtr = (mainmemory.read_u32_be(0x075d1c) - 0x80000000) + 0x44 * preset
 
 		local pA = read_vector_directly(presetDataPtr, 3)
 		local normal_x = read_vector_directly(presetDataPtr + 0xc, 3)
 		local normal_y = read_vector_directly(presetDataPtr + 0x18, 3)
-		local low_x = memory.readfloat(presetDataPtr + 0x34, true)
-		local high_z = memory.readfloat(presetDataPtr + 0x30, true)
-		local low_z = memory.readfloat(presetDataPtr + 0x2c, true)
+		local low_x = mainmemory.readfloat(presetDataPtr + 0x34, true)
+		local high_z = mainmemory.readfloat(presetDataPtr + 0x30, true)
+		local low_z = mainmemory.readfloat(presetDataPtr + 0x2c, true)
 
 		-- Flag[2] is whether it opens backwards
 		-- Flag[4] is whether it opens away from the player
@@ -606,7 +606,7 @@ end
 
 function ObjectData.getAllCollectables()
 	-- Outer loop from 7f03d0d4
-	local relPosData = memory.read_u32_be(0x30aa0)
+	local relPosData = mainmemory.read_u32_be(0x30aa0)
 	local isCollectible = {}
 
 	while relPosData ~= 0 do
@@ -614,7 +614,7 @@ function ObjectData.getAllCollectables()
 
 		local collectible = false
 
-		local field_2 = memory.read_s16_be(relPosData + 0x2)	-- not yet named
+		local field_2 = mainmemory.read_s16_be(relPosData + 0x2)	-- not yet named
 		local objClass = PositionData:get_value(relPosData, "object_type")
 		if field_2 < 1 and (objClass == 1 or objClass == 4) then
 			-- From 7f0506dc

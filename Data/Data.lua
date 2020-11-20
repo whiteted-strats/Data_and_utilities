@@ -51,7 +51,8 @@ end
 local dimension_mnemonics = {"x", "y", "z", "w"}
 
 local function read_vector(_address, _metadata)
-	local dimensions = (_metadata.size / 0x04)	
+	local dimensions = (_metadata.size / 0x04)
+	assert(dimensions <= 4)
 	local vector = {}	
 
 	for i = 1, dimensions, 1 do

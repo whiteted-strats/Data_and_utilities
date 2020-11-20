@@ -34,8 +34,8 @@ PositionData.metadata =
 
 local function distSqToPad(actorPos, padNum, somePadInfo)
 	local padPos = {
-		x = memory.readfloat(somePadInfo + (0x2c * padNum) + 0x0, true),
-		z = memory.readfloat(somePadInfo + (0x2c * padNum) + 0x8, true),
+		x = mainmemory.readfloat(somePadInfo + (0x2c * padNum) + 0x0, true),
+		z = mainmemory.readfloat(somePadInfo + (0x2c * padNum) + 0x8, true),
 	}
 	local diff = {
 		x = padPos.x - actorPos.x,
@@ -85,7 +85,7 @@ local function cleanerTileBFS(sourceTile, predicate)
 			while (pointIndex < pointCount) do
 				
 				-- Get neighbour tile and test if it's "null"
-				local index = memory.read_u16_be(internalPtr + 0xe)
+				local index = mainmemory.read_u16_be(internalPtr + 0xe)
 				neighbourTile = index * 8 + TileData.get_start_address() - 0x80000000
 
 				if (bit.rshift(index, 4) ~= 0 and not onStack[neighbourTile]) then
@@ -131,14 +131,14 @@ end
 PositionData.nearPadAfterTileWalk = nil
 
 function TileData.getPrelimNearPad(tile)
-	local somePadInfo = memory.read_u32_be(0x075d18) - 0x80000000
+	local somePadInfo = mainmemory.read_u32_be(0x075d18) - 0x80000000
 
 	tile = tile + 0x80000000
 	
 	-- See if this tile has some pad, and also prep our efficient predicate
 	local padOnTile = {}
 
-	local currPad = memory.read_u32_be(0x075d00) - 0x80000000 - PadData.size
+	local currPad = mainmemory.read_u32_be(0x075d00) - 0x80000000 - PadData.size
 	local padNum
 	local assocTile = -1
 	while assocTile ~= tile do
@@ -149,7 +149,7 @@ function TileData.getPrelimNearPad(tile)
 			break
 		end
 
-		assocTile = memory.read_u32_be(somePadInfo + (0x2c * padNum) + 0x28)
+		assocTile = mainmemory.read_u32_be(somePadInfo + (0x2c * padNum) + 0x28)
 
 		-- only store the first, since they repeat this searching process each time
 		-- on b1, 0062 and 0041 have the same tile (and are the same point)
@@ -180,7 +180,7 @@ end
 -- Except we've visited https://en.wikipedia.org/wiki/Breadth-first_search in our lifetime
 function PositionData.getNearPad(posDataAddr)
 	local tile = PositionData:get_value(posDataAddr, "tile_pointer")
-	local somePadInfo = memory.read_u32_be(0x075d18) - 0x80000000
+	local somePadInfo = mainmemory.read_u32_be(0x075d18) - 0x80000000
 	local padStart = PadData.get_start_address()
 
 	local currPad = TileData.getPrelimNearPad(tile - 0x80000000)
@@ -194,7 +194,7 @@ function PositionData.getNearPad(posDataAddr)
 	local linkageList = PadData:get_value(currPad, "linkageList") - 0x80000000
 
 	local shortestDist = distSqToPad(actorPos, padNum, somePadInfo)
-	local neighbour = memory.read_s32_be(linkageList)
+	local neighbour = mainmemory.read_s32_be(linkageList)
 	local dist
 	while neighbour >= 0 do
 		-- Convert index to pad to pad number
@@ -208,7 +208,7 @@ function PositionData.getNearPad(posDataAddr)
 		end
 		
 		linkageList = linkageList + 4
-		neighbour = memory.read_s32_be(linkageList)
+		neighbour = mainmemory.read_s32_be(linkageList)
 	end
 	
 	return padNum
@@ -219,9 +219,9 @@ end
 local function FUN_7f03d9ec(posDataAddr)	-- likely only doors' position data
 
 	local objDataPtr = PositionData:get_value(posDataAddr, "object_data_pointer") - 0x80000000
-	local odp_b4 = memory.readfloat(objDataPtr + 0xb4, true)	-- 'displacement percentage'
-	local odp_84 = memory.readfloat(objDataPtr + 0x84, true)	-- max 'displacement percentage'
-	local odp_0c = memory.read_u32_be(objDataPtr + 0xc)
+	local odp_b4 = mainmemory.readfloat(objDataPtr + 0xb4, true)	-- 'displacement percentage'
+	local odp_84 = mainmemory.readfloat(objDataPtr + 0x84, true)	-- max 'displacement percentage'
+	local odp_0c = mainmemory.read_u32_be(objDataPtr + 0xc)
 	local rtn
 
 	if (odp_b4 <= 0) then
@@ -255,8 +255,8 @@ function PositionData.checkFlags(posDataAddr, flags)
 
 		-- Original test (*(int *)(posData->object_data + 8) << 5 < 0)
 		--   i.e. testing the bit 5 from the msb. We're distrustful of lua
-		-- bit.band(bit.lshift(memory.read_u32_be(objDataPtr + 8), 5), 0x80000000)
-		local masked = bit.band(memory.read_u32_be(objDataPtr + 8), 0x04000000)
+		-- bit.band(bit.lshift(mainmemory.read_u32_be(objDataPtr + 8), 5), 0x80000000)
+		local masked = bit.band(mainmemory.read_u32_be(objDataPtr + 8), 0x04000000)
 
         if ((bit.band(flags, 0x100) ~= 0) and (masked ~= 0)) then
             bool = false
@@ -278,7 +278,7 @@ function PositionData.checkFlags(posDataAddr, flags)
             
             else 
 				rtn = true
-				local objFlags1 = memory.read_u32_be(objDataPtr + 8)
+				local objFlags1 = mainmemory.read_u32_be(objDataPtr + 8)
 				local masked = bit.band(objFlags1, 0x04000000)
 				if (bit.band(flags, 0x100) ~= 0) then
 					rtn = true
@@ -315,8 +315,8 @@ end
 --	a) we break it down by room
 --	b) we return position data pointers rather than indices
 function PositionData.getCollidablesInRooms(roomList)
-	local DAT_80071618 = memory.read_u32_be(0x071618) - 0x80000000
-	local DAT_8007161c = memory.read_u32_be(0x07161c) - 0x80000000
+	local DAT_80071618 = mainmemory.read_u32_be(0x071618) - 0x80000000
+	local DAT_8007161c = mainmemory.read_u32_be(0x07161c) - 0x80000000
 	local link, index, roomLoopValue
 	local seen = {}
 	local output = {}
@@ -326,7 +326,7 @@ function PositionData.getCollidablesInRooms(roomList)
 	-- Outer loop over rooms
 	for _, room in ipairs(roomList) do
 		output[room] = {}
-		link = memory.read_s16_be(DAT_80071618 + room * 2)
+		link = mainmemory.read_s16_be(DAT_80071618 + room * 2)
 
 		-- Middle loop over the chunks of values
 		while (link >= 0) do
@@ -334,7 +334,7 @@ function PositionData.getCollidablesInRooms(roomList)
 
 			-- Inner loop through the chunk of up to 15 values
 			repeat
-				roomLoopValue = memory.read_s16_be(DAT_8007161c + link * 0x20 + index)
+				roomLoopValue = mainmemory.read_s16_be(DAT_8007161c + link * 0x20 + index)
 				index = index + 2
 
 				if (-1 < roomLoopValue) then
@@ -348,7 +348,7 @@ function PositionData.getCollidablesInRooms(roomList)
 			until (index == 0x1e)
 			
 			-- Go to the next chunk for this room
-			link = memory.read_s16_be(DAT_8007161c + link * 0x20 + 0x1e)
+			link = mainmemory.read_s16_be(DAT_8007161c + link * 0x20 + 0x1e)
 		end
 	end
 
@@ -540,7 +540,7 @@ PadData.metadata = {
 }
 
 function PadData.get_start_address()
-	return memory.read_u32_be(0x75d00) - 0x80000000
+	return mainmemory.read_u32_be(0x75d00) - 0x80000000
 end
 
 function PadData.find_pad_by_number(padNum)
@@ -557,11 +557,11 @@ function PadData.find_pad_by_number(padNum)
 end
 
 function PadData.padPosFromNum(padNum)
-	local somePadInfo = memory.read_u32_be(0x075d18) - 0x80000000
+	local somePadInfo = mainmemory.read_u32_be(0x075d18) - 0x80000000
 	local padPos = {
-		x = memory.readfloat(somePadInfo + (0x2c * padNum) + 0x0, true),
-		y = memory.readfloat(somePadInfo + (0x2c * padNum) + 0x4, true),	-- addition, but surely?
-		z = memory.readfloat(somePadInfo + (0x2c * padNum) + 0x8, true),
+		x = mainmemory.readfloat(somePadInfo + (0x2c * padNum) + 0x0, true),
+		y = mainmemory.readfloat(somePadInfo + (0x2c * padNum) + 0x4, true),	-- addition, but surely?
+		z = mainmemory.readfloat(somePadInfo + (0x2c * padNum) + 0x8, true),
 	}
 	return padPos
 end
@@ -574,7 +574,7 @@ function PadData.get_pad_neighbours(padPtr)
 	local i = 0
 	local nns = {}
 	while true do
-		neighbourIndex = memory.read_s32_be(linkageList + i * 0x4)
+		neighbourIndex = mainmemory.read_s32_be(linkageList + i * 0x4)
 		if neighbourIndex == -1 then
 			break
 		end
@@ -601,7 +601,7 @@ SetData.metadata = {
 }
 
 function SetData.get_start_address()
-	return memory.read_u32_be(0x75d04) - 0x80000000
+	return mainmemory.read_u32_be(0x75d04) - 0x80000000
 end
 
 function SetData.get_set_neighbours(setPtr)
