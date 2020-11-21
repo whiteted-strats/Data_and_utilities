@@ -70,7 +70,11 @@ GuardData.metadata =
 	{["offset"] = 0x12C, ["size"] = 0x8, ["type"] = "vector",	["name"] = "south_collision"},
 	{["offset"] = 0x134, ["size"] = 0x8, ["type"] = "vector",	["name"] = "west_collision"},
 
-	{["offset"] = 0x160, ["size"] = 0x4, ["type"] = "hex", 		["name"] = "gun_pointer"}
+	{["offset"] = 0x160, ["size"] = 0x4, ["type"] = "hex", 		["name"] = "gun_pointer"},
+
+	{["offset"] = 0x180, ["size"] = 0x1, ["type"] = "hex", ["name"] = "shooting_stage_flag"},
+	{["offset"] = 0x184, ["size"] = 0xC, ["type"] = "vector",	["name"] = "shot_origin"},	-- confirmed on HUD apparently
+	{["offset"] = 0x190, ["size"] = 0xC, ["type"] = "vector",	["name"] = "bullet_dirc"}
 }
 
 function GuardData.get_capacity()
@@ -116,7 +120,7 @@ end
 function GuardData.azimuth_angle(_slot_address)
 	local w_pntr = GuardData.get_w_structure_addr(_slot_address)
 
-	-- Then read float from offset 0x14
+	-- then read float from offset 0x14
 	-- Other offsets are 0x20 (identical?) and 0x30 (can differ slightly?) 
 	local angle = mainmemory.readfloat(w_pntr+0x14,true)
 
@@ -128,4 +132,40 @@ function GuardData.get_w_structure_addr(_slot_address)
 	local mdp = GuardData:get_value(_slot_address, "model_data_pointer") - 0x80000000
 	local w_pntr = mainmemory.read_u32_be(mdp + 0x10) - 0x80000000
 	return w_pntr
+end
+
+
+function GuardData.get_speed(guardAddr)
+	-- Part 1 : 7f027fa8, cleaned up.
+	local mdp = mainmemory.read_u32_be(guardAddr + 0x1C)
+	if mdp == 0 then
+		return 0
+	end
+	mdp = mdp - 0x80000000
+	local animPtr = mainmemory.read_u32_be(mdp + 0x20)
+	local animData = mainmemory.read_u32_be(0x069538)
+	local offset = animPtr - animData
+
+	-- Presumably consts
+	local map = {}
+	map[0x4070] = mainmemory.readfloat(0x03098c, true)
+	map[0x40d4] = mainmemory.readfloat(0x030988, true)
+	map[0x77d4] = mainmemory.readfloat(0x030998, true)
+	map[0x777c] = mainmemory.readfloat(0x030994, true)
+	map[0x8204] = mainmemory.readfloat(0x030990, true)
+	-- 77d4 appears again later in the "switch", but we'll already have left.
+	--map[0x77d4] = mainmemory.readfloat(0x0309a4, true)
+	map[0x8520] = mainmemory.readfloat(0x0309a0, true)
+	-- ending ASM is tricksy
+	map[0x84c4] = mainmemory.readfloat(0x03099c, true)
+	default = mainmemory.readfloat(0x030984, true)
+
+	local v = map[offset] or default
+	local rtn_a = mainmemory.readfloat(mdp + 0x14, true) * v * mainmemory.readfloat(0x051df4, true)
+
+	-- End of 7f027fa8
+	-- Part 2 : Actual change to segment_coverage within 7f028600
+
+	local v2 = math.abs(mainmemory.readfloat(mdp + 0x40, true))	-- 7f06f618
+	return rtn_a * v2
 end
