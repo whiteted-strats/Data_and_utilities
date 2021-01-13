@@ -82,3 +82,13 @@ function PlayerData.get_tile()
 	local pdp = PlayerData.get_value("position_data_pointer") - 0x80000000
 	return PositionData:get_value(pdp, "tile_pointer")
 end
+
+function PlayerData.getWeapon(hand)
+	local pdp = PlayerData.get_start_address()
+	return mainmemory.read_u32_be(pdp + 0x870 + hand * 0x3a8)
+end
+
+function PlayerData.getWeaponSpecific(hand)
+	local pdp = PlayerData.get_start_address()
+	return mainmemory.read_s32_be(pdp + 0x874 + hand * 0x3a8)
+end
