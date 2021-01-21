@@ -194,6 +194,7 @@ KeyData.type = 0x04
 KeyData.size = 0x04
 KeyData.metadata =
 {
+	{["offset"] = 0x0, ["size"] = 0x04, ["type"] = "bitfield",	["name"] = "opens_locks"}
 }
 
 AlarmData = Data.create()
