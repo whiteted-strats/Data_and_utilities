@@ -52,14 +52,20 @@ PlayerData.metadata =
 	{["offset"] = 0x04FC, ["size"] = 0xC, ["type"] = "vector", 		["name"] = "scaled_velocity"},
 	{["offset"] = 0x0520, ["size"] = 0xC, ["type"] = "vector", 		["name"] = "velocity"},
 	{["offset"] = 0x0550, ["size"] = 0x4, ["type"] = "float",		["name"] = "stationary_ground_offset"},
+
 	{["offset"] = 0x0A80, ["size"] = 0x4, ["type"] = "float", 		["name"] = "noise"},
+	{["offset"] = 0x0E28, ["size"] = 0x4, ["type"] = "float", 		["name"] = "left_noise"},
+
 
 	-- 0x870 some kind of shooting data
 	
 	{["offset"] = 0x0FD4, ["size"] = 0x4, ["type"] = "unsigned", ["name"] = "weapon_z_hold"},
 
 	-- There are a whole list of matrices down here, as for guards (see the body part HUD)
-	{["offset"] = 0x10D4, ["size"] = 0x4, ["type"] = "hex", ["name"] = "view_matrix_pointer"}
+	{["offset"] = 0x10D4, ["size"] = 0x4, ["type"] = "hex", ["name"] = "view_matrix_pointer"},
+
+	-- Used to see if we can unlock a door
+	{["offset"] = 0x11E0, ["size"] = 0x4, ["type"] = "hex", ["name"] = "owned_items"},
 	
 }
 
@@ -91,4 +97,62 @@ end
 function PlayerData.getWeaponSpecific(hand)
 	local pdp = PlayerData.get_start_address()
 	return mainmemory.read_s32_be(pdp + 0x874 + hand * 0x3a8)
+end
+
+function PlayerData.getNoise()
+	local noise = 0
+	local pdp = PlayerData.get_start_address()
+	
+	-- These tests are whether a shot is being fired this frame
+	--if mainmemory.read_u8(pdp + 0x87C) ~= 0 then
+
+	noise = PlayerData.get_value("noise") -- right noise
+	
+
+	local left_noise = PlayerData.get_value("left_noise")
+	-- mainmemory.read_u8(pdp + 0x87C + 0x3a8) ~= 0 and 
+	if left_noise > noise then
+		noise = left_noise
+	end
+
+	return noise
+end
+
+function PlayerData.hasKeyForLocks(locks)
+	-- This involves some iter over more 'owned items'
+	-- Ported from 7f08ce70
+
+	if locks == 0 then
+		return true
+	end
+
+	local firstItmPtr = PlayerData.get_value("owned_items")
+	local itmPtr = firstItmPtr
+	local wrapperPtr
+	local objPt
+	local foundKeys = 0
+
+	while itmPtr ~= 0 and itmPtr ~= firstItmPtr do
+		console.log(("%08X"):format(itmPtr))
+		itmPtr = itmPtr - 0x80000000
+		if mainmemory.read_u32_be(itmPtr + 0x0) == 2 then
+			wrapperPtr = mainmemory.read_u32_be(itmPtr + 0x4) - 0x80000000
+			if mainmemory.read_u8(wrapperPtr + 0x0) == 0x01 then
+
+				objPtr = mainmemory.read_u32_be(wrapperPtr + 0x4) - 0x80000000
+				if ObjectData.get_type(objPtr) == 0x04 then	-- key
+					foundKeys = bit.bor(foundKeys, KeyData:get_value(objPtr, "opens_locks"))
+
+					if bit.band(locks, foundKeys) == locks then	-- all locks can be opened
+						return true
+					end
+				end
+
+			end
+		end
+		itmPtr = mainmemory.read_u32_be(itmPtr + 0xC)
+	end
+
+	return false
+
 end
