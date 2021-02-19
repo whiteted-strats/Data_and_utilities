@@ -268,6 +268,10 @@ function GuardData.get_shooting_data(_slot_address, coneColour)
 		intolIncr = intolIncr * (300 / distToBond)
 	end
 
+	-- 0.6 on A, 0.75 on SA, 1 on 00A / 007 :)
+	local intolMultiplier = mainmemory.readfloat(0x02ce40, true)
+	intolIncr = intolIncr * intolMultiplier
+
 	-- Get all the shooting angles
 	local distPastBond = distToBond + 100
 	local gunHeading = GuardData.get_gun_heading(_slot_address) * (180 / math.pi)
