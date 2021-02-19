@@ -178,8 +178,10 @@ PhysicalObjectData.metadata =
 	{["offset"] = 0x08, ["size"] = 0x04, ["type"] = "bitfield", ["name"] = "flags_1"},
 	{["offset"] = 0x0C, ["size"] = 0x04, ["type"] = "bitfield", ["name"] = "flags_2"},
 	{["offset"] = 0x10, ["size"] = 0x04, ["type"] = "hex", 		["name"] = "position_data_pointer"},
+	{["offset"] = 0x14, ["size"] = 0x04, ["type"] = "hex", 		["name"] = "model_data_pointer"},
 	{["offset"] = 0x18, ["size"] = 0x40, ["type"] = "matrix", 	["name"] = "transform"},
 	{["offset"] = 0x58, ["size"] = 0x0C, ["type"] = "vector",	["name"] = "position"},
+	{["offset"] = 0x64, ["size"] = 0x04, ["type"] = "hex",		["name"] = "more_flags"},	-- used onscreen
 	{["offset"] = 0x68, ["size"] = 0x04, ["type"] = "hex",		["name"] = "collision_data_pointer"},
 	{["offset"] = 0x6C, ["size"] = 0x04, ["type"] = "hex",		["name"] = "motion_data_pointer"},	
 	{["offset"] = 0x70, ["size"] = 0x04, ["type"] = "float",	["name"] = "damage_received"},

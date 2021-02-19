@@ -30,7 +30,7 @@ function ScriptDataReader:next_slot()
 end
 
 function ScriptDataReader:is_empty()
-	return ScriptData.is_empty(self.current_address)
+	return false
 end
 
 function ScriptDataReader:is_clone()

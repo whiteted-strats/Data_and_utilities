@@ -1,5 +1,6 @@
 require "Data\\Data"
 require "Data\\GE\\PositionData"
+require "Data\\GE\\PlayerData"
 
 GuardData = Data.create()
 
@@ -28,6 +29,7 @@ GuardData.metadata =
 
 	-- Unions galore here
 	{["offset"] = 0x02C, ["size"] = 0x4, ["type"] = "unsigned", ["name"] = "fadeout_timer"},
+	{["offset"] = 0x02C, ["size"] = 0x4, ["type"] = "hex", 		["name"] = "shooting_pointer"},	-- related to anim
 	{["offset"] = 0x02C, ["size"] = 0xC, ["type"] = "vector", 	["name"] = "bond_position"},
 	{["offset"] = 0x038, ["size"] = 0x4, ["type"] = "hex", 		["name"] = "target_tile"},
 	{["offset"] = 0x03C, ["size"] = 0x4, ["type"] = "hex", 		["name"] = "target_pad"},
@@ -35,26 +37,27 @@ GuardData.metadata =
 
 	-- Array of size 6, so -> 0x58
 	{["offset"] = 0x040, ["size"] = 0x4, ["type"] = "unsigned", ["name"] = "path_stack"},
+	{["offset"] = 0x04C, ["size"] = 0x4, ["type"] = "unsigned", ["name"] = "shooting_flags"},	-- more union, & 0x1 might be is_shooting
 	{["offset"] = 0x058, ["size"] = 0x1, ["type"] = "unsigned", ["name"] = "path_stack_index"},
-	{["offset"] = 0x059, ["size"] = 0x1, ["type"] = "enum", 	["name"] = "turning_stage"},
+	{["offset"] = 0x059, ["size"] = 0x1, ["type"] = "unsigned", 	["name"] = "turning_stage"},
 	{["offset"] = 0x05A, ["size"] = 0x2, ["type"] = "unsigned", ["name"] = "odd_time_bound"},
 	
 
 
 	-- =============================================================================================
 	-- Chasing/Path-Walking data (>= 0x40 in size)
-	{["offset"]= 0x05c, ["size"] = 0x1, ["type"] = "hex", 		["name"] = "motion_stage"},
-	{["offset"]= 0x05d, ["size"] = 0x1, ["type"] = "unsigned", 	["name"] = "fail_count"},
-	{["offset"]= 0x05e, ["size"] = 0x1, ["type"] = "hex", 		["name"] = "normal_target_set"},
-	{["offset"]= 0x05f, ["size"] = 0x1, ["type"] = "hex", 		["name"] = "local_target_set"},
+	{["offset"] = 0x05c, ["size"] = 0x1, ["type"] = "hex", 		["name"] = "motion_stage"},
+	{["offset"] = 0x05d, ["size"] = 0x1, ["type"] = "unsigned", ["name"] = "fail_count"},
+	{["offset"] = 0x05e, ["size"] = 0x1, ["type"] = "hex", 		["name"] = "normal_target_set"},
+	{["offset"] = 0x05f, ["size"] = 0x1, ["type"] = "hex", 		["name"] = "local_target_set"},
 	{["offset"] = 0x060, ["size"] = 0xC, ["type"] = "vector", 	["name"] = "target_position"},
-
-	{["offset"] = 0x06c, ["size"] = 0xC, ["type"] = "vector", 	["name"] = "barrier_right_pos"},
+	
+	{["offset"] = 0x06c, ["size"] = 0xC, ["type"] = "vector", 	["name"] = "barrier_left_pos"},	-- the guard always favours the left side (bad news for fac lure)
 	-- ! overlap here, a union but I don't know the first unloaded member
 	{["offset"] = 0x070, ["size"] = 0x4, ["type"] = "float", 	["name"] = "path_segment_coverage"},
 	{["offset"] = 0x074, ["size"] = 0x4, ["type"] = "float", 	["name"] = "path_segment_length"},
 
-	{["offset"] = 0x078, ["size"] = 0xC, ["type"] = "vector",	["name"] = "barrier_left_pos"},
+	{["offset"] = 0x078, ["size"] = 0xC, ["type"] = "vector",	["name"] = "barrier_right_pos"},
 	{["offset"] = 0x084, ["size"] = 0x4, ["type"] = "unsigned", ["name"] = "chase_timer"},
 	{["offset"] = 0x088, ["size"] = 0xC, ["type"] = "vector",	["name"] = "local_target_position"},
 
@@ -86,7 +89,14 @@ GuardData.metadata =
 	{["offset"] = 0x12C, ["size"] = 0x8, ["type"] = "vector",	["name"] = "south_collision"},
 	{["offset"] = 0x134, ["size"] = 0x8, ["type"] = "vector",	["name"] = "west_collision"},
 
-	{["offset"] = 0x160, ["size"] = 0x4, ["type"] = "hex", 		["name"] = "gun_pointer"},
+	-- Boost work
+	{["offset"] = 0x13C, ["size"] = 0x4, ["type"] = "float",	["name"] = "intolerance"},
+	{["offset"] = 0x14C, ["size"] = 0x4, ["type"] = "float",	["name"] = "gun_angle"},
+	
+
+	{["offset"] = 0x160, ["size"] = 0x4, ["type"] = "hex", 		["name"] = "left_gun_pointer"},
+	{["offset"] = 0x164, ["size"] = 0x4, ["type"] = "hex", 		["name"] = "right_gun_pointer"},
+
 
 	{["offset"] = 0x180, ["size"] = 0x1, ["type"] = "hex", ["name"] = "shooting_stage_flag"},
 	{["offset"] = 0x184, ["size"] = 0xC, ["type"] = "vector",	["name"] = "shot_origin"},	-- confirmed on HUD apparently
@@ -143,6 +153,194 @@ function GuardData.azimuth_angle(_slot_address)
 	return angle
 end
 
+-- Careful port of 7f06cc80 for a guard (which simplifies 7f06c79c)
+-- Likely the same as the above (if b = 1 and v = 0 always)
+function GuardData.facing_angle(_slot_address)
+	local mdp = GuardData:get_value(_slot_address, "model_data_pointer") - 0x80000000
+	local ptr = mainmemory.read_u32_be(mainmemory.read_u32_be(mdp + 0x8) -0x80000000 + 0x0) - 0x80000000
+
+	-- Read as a half, then masked
+	local b = mainmemory.read_u8(ptr + 0x1)
+	if b ~= 1 then
+		return 0
+	end
+
+	-- Going into 7f06c79c
+	local v = mainmemory.read_u16_be(mainmemory.read_u32_be(ptr + 0x4) -0x80000000 + 0xc)
+
+	local ptr2 = mainmemory.read_u32_be(ptr + 0x8)
+	assert(ptr2 == 0)	-- Otherwise we need to code a loop
+
+	local pVar = mainmemory.read_u32_be(mdp + 0x10) - 0x80000000
+	local transformDataPtr = pVar + v
+
+	return mainmemory.readfloat(transformDataPtr + 0x14, true)
+end
+
+function GuardData.get_gun_heading(_slot_address)
+	-- Port of 7f02c190
+	-- Gun angle probably isn't defined unless they are shooting
+	local facingAngle = GuardData.facing_angle(_slot_address)
+	local gunAngle = GuardData:get_value(_slot_address, "gun_angle")
+	--local currentAction = GuardData:get_value(_slot_address, "current_action")
+	local shootPtr = GuardData:get_value(_slot_address, "shooting_pointer")
+
+	local extraAngle = 0
+	if shootPtr ~= 0 then
+		shootPtr = shootPtr - 0x80000000
+		extraAngle = mainmemory.readfloat(shootPtr + 0xc, true)
+
+		local mdp = GuardData:get_value(_slot_address, "model_data_pointer") - 0x80000000
+		local reflectionProbably = mainmemory.read_u8(mdp + 0x24)
+		if reflectionProbably ~= 0 then
+			extraAngle = -extraAngle
+		end
+	end
+
+	return (facingAngle + gunAngle + extraAngle) % (2*math.pi)
+end
+
+function GuardData.get_gun_position(_slot_address)
+	-- Right gun only (0) atm, there's code for both though
+	local gunHeading = GuardData.get_gun_heading(_slot_address)
+	local guardPos = GuardData.get_position(_slot_address)
+	
+	return {
+		x = guardPos.x - 10*math.cos(gunHeading),
+		y = guardPos.y + 30,
+		z = guardPos.z + 10*math.sin(gunHeading),
+	}
+end
+
+function GuardData.get_weapon_type(_slot_address, hand)
+	local ptr = mainmemory.read_u32_be(_slot_address + 0x160 + hand * 4)
+	if ptr == 0x0 then
+		return -1
+	end
+
+	local ptr = ptr - 0x80000000
+	local gunObject = mainmemory.read_u32_be(ptr + 0x4) - 0x80000000
+	return WeaponData:get_value(gunObject, "type")
+end
+
+function GuardData.disp_to_bond(_slot_address)
+	local guardPos = GuardData.get_position(_slot_address)
+	local bondPos = PlayerData.get_position()
+	return {
+		x = bondPos.x - guardPos.x,
+		y = bondPos.y - guardPos.y,
+		z = bondPos.z - guardPos.z,
+	}
+end
+
+function GuardData.get_shooting_data(_slot_address, coneColour)
+	local intolIncr = 0.16
+
+	local weaponId = GuardData.get_weapon_type(_slot_address, 0)	-- right hand.. not all guards are?
+	if weaponId == -1 then
+		return	-- no weapon
+	end
+
+	-- Get the gun data
+	local gunDataPtr = 0x033924 + weaponId * 0x38
+	local gunData = 0x32494    -- default
+	if mainmemory.read_u32_be(gunDataPtr + 0x8) == 0 then
+		gunData = mainmemory.read_u32_be(gunDataPtr + 0xc) - 0x80000000
+	end
+
+	-- Apply appropriate doubling
+	local gunGuardAcc = mainmemory.read_s8(gunData + 0x22)
+	if gunGuardAcc < 1 then
+		intolIncr = intolIncr * 2
+	end
+	if weaponId == 0xf or weaponId == 0x10 then
+		intolIncr = intolIncr * 2
+	end
+
+	-- TODO consider aztec guards - that byte that we're ignoring will be used by them
+
+
+	-- Guard to bond
+	local guardPos = GuardData.get_position(_slot_address)
+	local GB = GuardData.disp_to_bond(_slot_address)
+	local distToBond = math.sqrt(GB.x*GB.x + GB.y*GB.y + GB.z*GB.z)
+	if distToBond > 300 then	-- 3m
+		intolIncr = intolIncr * (300 / distToBond)
+	end
+
+	-- Get all the shooting angles
+	local distPastBond = distToBond + 100
+	local gunHeading = GuardData.get_gun_heading(_slot_address) * (180 / math.pi)
+	local distances = {200,400,800,1600,distPastBond+100}
+	local angles = {360 / 25, 360 / 42, 360 / 84, 360 / 167, 360 / 335, 0}
+	local currDist, currAngle, nextAngle
+	local reachedBond = false
+	local cones = {}
+	for i = 1,5,1 do
+		currDist = distances[i]
+		reachedBond = currDist >= distPastBond
+		if reachedBond then
+			currDist = distPastBond
+			nextAngle = 0
+		else	
+			nextAngle = angles[i+1]
+		end
+
+		currAngle = angles[i]
+		currAngle = currAngle - nextAngle
+
+		table.insert(cones, {
+			x = guardPos.x,
+			y = guardPos.y,
+			z = guardPos.z,
+			radius = currDist,
+			start_angle = gunHeading - nextAngle - currAngle,
+			sweep_angle = currAngle,
+			color = coneColour,
+			left = false,
+		})
+		table.insert(cones, {
+			x = guardPos.x,
+			y = guardPos.y,
+			z = guardPos.z,
+			radius = currDist,
+			start_angle = gunHeading + nextAngle,
+			sweep_angle = currAngle,
+			color = coneColour,
+			left = true,
+		})
+
+		if reachedBond then
+			break
+		end
+	end
+
+	return {
+		weaponId = weaponId,
+		intolIncr = intolIncr,
+		gunPos = GuardData.get_gun_position(_slot_address),
+		cones = cones,
+	}
+end
+
+function shotAngleLimitFromDistance(distToBondSq)
+	if (2560000 < distToBondSq) then
+		-- >= 16m : 1 / 335th of a full circle
+		return 0.01875578
+	elseif (640000 < distToBondSq) then
+		-- (8-16m] 1 / 167th of a full circle
+		return 0.03762386
+	elseif (160000 < distToBondSq) then
+		-- (4-8m] 1 / 84th full circle
+		return 0.07479983
+	elseif (40000 < distToBondSq) then
+		-- (2-4m] 1 / 42nd of a circle
+		return 0.14959966
+	else
+		-- [0-2m] 1 / 25th full circle
+		return 0.25132743
+	end
+end
 
 function GuardData.get_w_structure_addr(_slot_address)
 	local mdp = GuardData:get_value(_slot_address, "model_data_pointer") - 0x80000000
@@ -196,8 +394,10 @@ function GuardData.get_dodge_points(guardAddr)
 	local pdp = GuardData:get_value(guardAddr, "position_data_pointer") - 0x80000000
 	local G = PositionData:get_value(pdp, "position")
 	local dd = GuardData:get_value(guardAddr, "collision_radius") * 1.2 * 1.05	-- Dodge distance
+	-- Note that this dodge distance and construction necessarily means this edge doesn't overlap the movement corridor
+	--   which is 1.2*CR at the destination end.
 
-	local angleMult = {1,-1}
+	local angleMult = {-1, 1}
 	local dodgePnts = {}
 
 	for i, P in ipairs({GuardData:get_value(guardAddr, "barrier_right_pos"), GuardData:get_value(guardAddr, "barrier_left_pos")}) do

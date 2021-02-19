@@ -527,6 +527,16 @@ function TileData.getBoundary(tiles, isExternal)
 	return boundary
 end
 
+function TileData.getTileWithName(name)
+	local allAddrs = TileData.getAllTiles()
+	for _, tileAddr in ipairs(allAddrs) do
+		if name == TileData:get_value(tileAddr, "name") then
+			return tileAddr
+		end
+	end
+
+	return nil
+end
 
 -- Pad data
 PadData = Data.create()
