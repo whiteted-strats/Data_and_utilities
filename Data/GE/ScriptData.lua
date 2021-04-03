@@ -3,11 +3,12 @@
 
 require "Data\\Data"
 require "Data\\GE\\ObjectData"
+require "Data\\GE\\Version"
 
 ScriptData = Data.create()
 
-ScriptData.start_pointer_address = 0x03097C
-ScriptData.capacity_address = 0x030980
+ScriptData.start_pointer_address = ({['U'] = 0x03097C, ['P'] = 0x02becc,})[__GE_VERSION__]   
+ScriptData.capacity_address = ({['U'] = 0x030980, ['P'] = 0x02bed0,})[__GE_VERSION__]   
 ScriptData.size = 0x1DC
 
 -- copied from GuardData and stripped back. 
@@ -40,7 +41,7 @@ end
 -- Adapted from tas tools' script_module
 
 local function getScripts(scriptBlob)
-	-- Globals at 0x03744C
+	-- NTSC-U Globals (00XX) at 0x03744C
 	local scriptAddr = {}
     local addr,id
 	while true do
@@ -59,10 +60,15 @@ local function getScripts(scriptBlob)
 	return scriptAddr
 end
 
+
+ScriptData.scriptBlobAddr = ({['U'] = 0x75D14, ['P'] = 0x064c50,})[__GE_VERSION__]
 function getLevelScripts()
 	-- Level scripts & Actors (10XX & 04XX)
-	return getScripts(mainmemory.read_u32_be(0x75D14) - 0x80000000)
+	return getScripts(mainmemory.read_u32_be(ScriptData.scriptBlobAddr) - 0x80000000)
 end
+
+local virtual_offset = ({['U'] = 0x34b30, ['P'] = 0x329f0, ['J'] = 0x34b70})[__GE_VERSION__]
+ScriptData.instrJumpTableAddr = ({['U'] = 0x052100, ['P'] = 0x048240})[__GE_VERSION__]
 
 local function getCommandLength(scriptPtr)
     local id = mainmemory.read_u8(scriptPtr)
@@ -77,9 +83,9 @@ local function getCommandLength(scriptPtr)
         -- All simple functions of the form
         -- 03e00008     jr ra
         -- 2402XXXX     li v0, X    (addiu v0, zero, X)
-        local funcAddr = mainmemory.read_u32_be(0x052100 + 4*id)
+        local funcAddr = mainmemory.read_u32_be(ScriptData.instrJumpTableAddr  + 4*id)
         -- 7F virtual -> physical on the ROM
-        funcAddr = funcAddr + 0x34b30 - 0x7f000000
+        funcAddr = funcAddr + virtual_offset - 0x7f000000
         memory.usememorydomain("ROM")
         local instr1 = memory.read_u32_be(funcAddr)
         local instr2 = memory.read_u32_be(funcAddr + 0x4)

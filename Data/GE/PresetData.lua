@@ -1,9 +1,11 @@
 require "Data\\Data"
+require "Data\\GE\\Version"
 
 PresetData = Data.create()
 PresetData.size = 0x44
-PresetData.start_address = 0x075d1c
-PresetData.end_address = 0x075d0c	-- just by eye on frig/statue, points to after an entirely zeroed preset
+-- Both PALs deduced from PositionData.OtherPresetDataAddr
+PresetData.start_address = ({['U'] = 0x075d1c, ['P'] = 0x064c5c,})[__GE_VERSION__]
+PresetData.end_address = ({['U'] = 0x075d0c, ['P'] = 0x064c4c,})[__GE_VERSION__]	-- just by eye on frig/statue, points to after an entirely zeroed preset
 
 PresetData.metadata = {
 	-- Structure largely confirmed by 7f03f598
@@ -26,7 +28,7 @@ function PresetData.get_start_address()
 	return mainmemory.read_u32_be(PresetData.start_address) - 0x80000000
 end
 function PresetData.get_end_address()
-	return mainmemory.read_u32_be(PresetData.end_address) - 0x80000000 - 0x44
+	return mainmemory.read_u32_be(PresetData.end_address) - 0x80000000 - PresetData.size
 end
 
 function PresetData.getPresetAddrFromNum(preset_num)
@@ -36,7 +38,7 @@ function PresetData.getPresetAddrFromNum(preset_num)
 	if (preset_num >= 10000) then
 		preset_num = preset_num - 10000
 	end
-	return PresetData.get_start_address() + 0x44 * preset_num
+	return PresetData.get_start_address() + PresetData.size * preset_num
 end 
 
 

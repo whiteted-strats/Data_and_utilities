@@ -1,4 +1,5 @@
 require "Data\\Data"
+require "Data\\GE\\Version"
 
 local SpawnData = Data.create()
 
@@ -82,7 +83,7 @@ CreditsData.metadata =
 
 IntroData = {}
 
-IntroData.start_pointer_address = 0x075D08
+IntroData.start_pointer_address = ({['U'] = 0x075D08, ['P'] = 0x064c48,})[__GE_VERSION__]
 IntroData.data_types = 
 {
 	[0x0] = SpawnData,

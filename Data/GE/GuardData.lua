@@ -1,11 +1,12 @@
 require "Data\\Data"
 require "Data\\GE\\PositionData"
 require "Data\\GE\\PlayerData"
+require "Data\\GE\\Version"
 
 GuardData = Data.create()
 
-GuardData.start_pointer_address = 0x02CC64
-GuardData.capacity_address = 0x2CC68
+GuardData.start_pointer_address = ({['U'] = 0x02CC64, ['P'] = 0x0281b4,})[__GE_VERSION__]
+GuardData.capacity_address = ({['U'] = 0x2CC68, ['P'] = 0x0281b8,})[__GE_VERSION__]
 GuardData.size = 0x1DC
 GuardData.fadeout_length = 90
 GuardData.metadata =
@@ -233,6 +234,13 @@ function GuardData.disp_to_bond(_slot_address)
 	}
 end
 
+WeaponBlob = {}
+WeaponBlob.size = 0x38
+WeaponBlob.start_address = ({['U'] = 0x033924, ['P'] = 0x02ee7c,})[__GE_VERSION__]  
+WeaponBlob.default = ({['U'] = 0x032494, ['P'] = 0x02d9e4,})[__GE_VERSION__]
+
+IntoleranceMultiplierAddr = ({['U'] = 0x02ce40, ['P'] = 0x028390,})[__GE_VERSION__]
+
 function GuardData.get_shooting_data(_slot_address, coneColour)
 	local intolIncr = 0.16
 
@@ -242,8 +250,8 @@ function GuardData.get_shooting_data(_slot_address, coneColour)
 	end
 
 	-- Get the gun data
-	local gunDataPtr = 0x033924 + weaponId * 0x38
-	local gunData = 0x32494    -- default
+	local gunDataPtr = WeaponBlob.start_address + weaponId * WeaponBlob.size
+	local gunData = WeaponBlob.default
 	if mainmemory.read_u32_be(gunDataPtr + 0x8) == 0 then
 		gunData = mainmemory.read_u32_be(gunDataPtr + 0xc) - 0x80000000
 	end
@@ -269,7 +277,7 @@ function GuardData.get_shooting_data(_slot_address, coneColour)
 	end
 
 	-- 0.6 on A, 0.75 on SA, 1 on 00A / 007 :)
-	local intolMultiplier = mainmemory.readfloat(0x02ce40, true)
+	local intolMultiplier = mainmemory.readfloat(IntoleranceMultiplierAddr, true)
 	intolIncr = intolIncr * intolMultiplier
 
 	-- Get all the shooting angles
@@ -352,34 +360,49 @@ function GuardData.get_w_structure_addr(_slot_address)
 	return w_pntr
 end
 
+GuardData.default_speed_addr = ({['U'] = 0x030984, ['P'] = 0x02bed4,})[__GE_VERSION__]
+GuardData.speed_map = ({
+	['U'] = {
+		[0x4070] = 0x03098c,
+		[0x40d4] = 0x030988,
+		[0x77d4] = 0x030998,
+		[0x777c] = 0x030994,
+		[0x8204] = 0x030990,
+		-- 77d4 appears again later in the "switch", but we'll already have left.
+		-- [0x77d4] = 0x0309a4,
+		[0x8520] = 0x0309a0,
+		-- ending ASM is tricksy
+		[0x84c4] = 0x03099c,
+	},
+	['P'] = {
+		-- Very similar to the above
+		[0x4070] = 0x02bedc,
+		[0x40d4] = 0x02bed8,
+		[0x77d4] = 0x02bee8,
+		[0x777c] = 0x02bee4,
+		[0x8204] = 0x02bee0,
+		[0x8520] = 0x02bef0,
+		[0x84c4] = 0x02beec,
+	}
+})[__GE_VERSION__]
+GuardData.AnimDataBase = ({['U'] = 0x069538, ['P'] = 0x058478,})[__GE_VERSION__]
+GuardData.SomeSpeedConstAddr = ({['U'] = 0x051df4, ['P'] = 0x047f2c,})[__GE_VERSION__]
 
 function GuardData.get_speed(guardAddr)
 	-- Part 1 : 7f027fa8, cleaned up.
+	-- 7f027fc0 in PAL
 	local mdp = mainmemory.read_u32_be(guardAddr + 0x1C)
 	if mdp == 0 then
 		return 0
 	end
 	mdp = mdp - 0x80000000
 	local animPtr = mainmemory.read_u32_be(mdp + 0x20)
-	local animData = mainmemory.read_u32_be(0x069538)
+	local animData = mainmemory.read_u32_be(GuardData.AnimDataBase)
 	local offset = animPtr - animData
 
-	-- Presumably consts
-	local map = {}
-	map[0x4070] = mainmemory.readfloat(0x03098c, true)
-	map[0x40d4] = mainmemory.readfloat(0x030988, true)
-	map[0x77d4] = mainmemory.readfloat(0x030998, true)
-	map[0x777c] = mainmemory.readfloat(0x030994, true)
-	map[0x8204] = mainmemory.readfloat(0x030990, true)
-	-- 77d4 appears again later in the "switch", but we'll already have left.
-	--map[0x77d4] = mainmemory.readfloat(0x0309a4, true)
-	map[0x8520] = mainmemory.readfloat(0x0309a0, true)
-	-- ending ASM is tricksy
-	map[0x84c4] = mainmemory.readfloat(0x03099c, true)
-	default = mainmemory.readfloat(0x030984, true)
-
-	local v = map[offset] or default
-	local rtn_a = mainmemory.readfloat(mdp + 0x14, true) * v * mainmemory.readfloat(0x051df4, true)
+	local v_addr = GuardData.speed_map[offset] or GuardData.default_speed_addr
+	local v = mainmemory.readfloat(v_addr, true)
+	local rtn_a = mainmemory.readfloat(mdp + 0x14, true) * v * mainmemory.readfloat(GuardData.SomeSpeedConstAddr, true)
 
 	-- End of 7f027fa8
 	-- Part 2 : Actual change to segment_coverage within 7f028600

@@ -1,8 +1,10 @@
 require "Data\\Data"
+require "Data\\GE\\Version"
 
+-- Looks suspiciously like the explosion data to me..
 SmokeData = Data.create()
 
-SmokeData.start_pointer_address = 0x07A140
+SmokeData.start_pointer_address = ({['U'] = 0x07A140, ['P'] = 0x068c50,})[__GE_VERSION__]  
 SmokeData.size = 0x198
 SmokeData.capacity = 20
 SmokeData.metadata = 

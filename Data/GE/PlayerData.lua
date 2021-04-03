@@ -1,9 +1,10 @@
 require "Data\\Data"
 require "Data\\GE\\PositionData"
+require "Data\\GE\\Version"
 
 PlayerData = Data.create()
 
-PlayerData.start_pointer_address = 0x079EE0
+PlayerData.start_pointer_address = ({['U'] = 0x079EE0, ['P'] = 0x0689F0})[__GE_VERSION__]
 PlayerData.size = 0x2A80
 PlayerData.invincibility_length = 30
 PlayerData.metadata = 

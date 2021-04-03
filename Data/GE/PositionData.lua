@@ -1,11 +1,15 @@
 require "Data\\Data"
 require "Data\\GE\\GameData"
+require "Data\\GE\\Version"
 
 -- Now including tile & pad data.. for now
 
 TileData = Data.create()
 
 PositionData = Data.create()
+
+PositionData.head_ptr = ({['U'] = 0x030aa0, ['P'] = 0x02bff0,})[__GE_VERSION__]    
+PositionData.OtherPresetDataAddr = ({['U'] = 0x075d18, ['P'] = 0x064c58,})[__GE_VERSION__] 
 
 PositionData.size = 0x34
 PositionData.object_types =
@@ -131,14 +135,14 @@ end
 PositionData.nearPadAfterTileWalk = nil
 
 function TileData.getPrelimNearPad(tile)
-	local somePadInfo = mainmemory.read_u32_be(0x075d18) - 0x80000000
+	local somePadInfo = mainmemory.read_u32_be(PositionData.OtherPresetDataAddr) - 0x80000000
 
 	tile = tile + 0x80000000
 	
 	-- See if this tile has some pad, and also prep our efficient predicate
 	local padOnTile = {}
 
-	local currPad = mainmemory.read_u32_be(0x075d00) - 0x80000000 - PadData.size
+	local currPad = PadData.get_start_address() - PadData.size
 	local padNum
 	local assocTile = -1
 	while assocTile ~= tile do
@@ -176,11 +180,12 @@ function TileData.getPrelimNearPad(tile)
 	return currPad
 end
 
+
 -- Mimicing 7f027cd4, tile -> pad (-> BFS) -> closest of this & it's neighbour
 -- Except we've visited https://en.wikipedia.org/wiki/Breadth-first_search in our lifetime
 function PositionData.getNearPad(posDataAddr)
 	local tile = PositionData:get_value(posDataAddr, "tile_pointer")
-	local somePadInfo = mainmemory.read_u32_be(0x075d18) - 0x80000000
+	local somePadInfo = mainmemory.read_u32_be(PositionData.OtherPresetDataAddr) - 0x80000000
 	local padStart = PadData.get_start_address()
 
 	local currPad = TileData.getPrelimNearPad(tile - 0x80000000)
@@ -315,8 +320,10 @@ end
 --	a) we break it down by room
 --	b) we return position data pointers rather than indices
 function PositionData.getCollidablesInRooms(roomList)
-	local DAT_80071618 = mainmemory.read_u32_be(0x071618) - 0x80000000
-	local DAT_8007161c = mainmemory.read_u32_be(0x07161c) - 0x80000000
+	local hmm = ({['U'] = 0x071618, ['P'] = 0x060558,})[__GE_VERSION__]
+
+	local DAT_80071618 = mainmemory.read_u32_be(hmm) - 0x80000000
+	local DAT_8007161c = mainmemory.read_u32_be(hmm + 4) - 0x80000000
 	local link, index, roomLoopValue
 	local seen = {}
 	local output = {}
@@ -376,9 +383,10 @@ function PositionData.readRoomList(posDataAddr)
 	return rooms
 end
 
+PositionData.first_addr = ({['U'] = 0x069c38, ['P'] = 0x058b78,})[__GE_VERSION__]  -- no need to read :) 
 
 function PositionData.get_start_address()
-	return 0x069c38			-- no need to read :) 
+	return PositionData.first_addr 
 end
 
 -- Tile data
@@ -437,14 +445,15 @@ function TileData.get_points(addr, scale)
 	return pnts
 end
 
+TileData.start_pointer_address = ({['U'] = 0x040F58, ['P'] = 0x03aba8,})[__GE_VERSION__]
 function TileData.get_start_address()
-	return mainmemory.read_u32_be(0x040F58)
+	return mainmemory.read_u32_be(TileData.start_pointer_address)
 end
 
 function TileData.get_first_tile_address()
 	-- Precisely skips a list of 31 pointers and a 00000000
 	-- This is in 0x040F5C
-	ptr = mainmemory.read_u32_be(0x040F5C)
+	ptr = mainmemory.read_u32_be(TileData.start_pointer_address + 4)
 	assert(ptr == (TileData.get_start_address() + 0x80), "Tile data looks bad")
 	return ptr
 	
@@ -452,7 +461,7 @@ end
 
 function TileData.get_last_tile_address()
 	-- The last tile, not the end of data
-	return mainmemory.read_u32_be(0x040F60)
+	return mainmemory.read_u32_be(TileData.start_pointer_address + 0x8)
 end
 
 function TileData.get_links(addr)
@@ -538,6 +547,30 @@ function TileData.getTileWithName(name)
 	return nil
 end
 
+function TileData.getTilesWithNames(names)
+	-- As above for many tiles, in one pass
+	local addresses = {}
+
+	local index = {}
+	local i, name
+	for i, name in ipairs(names) do
+		index[name] = i
+	end
+
+	local allAddrs = TileData.getAllTiles()
+
+	for _, tileAddr in ipairs(allAddrs) do
+		name = TileData:get_value(tileAddr, "name")
+		i = index[name]
+		if i ~= nil then
+			addresses[i] = tileAddr
+		end
+	end
+
+	addresses.n = names.n
+	return addresses
+end
+
 -- Pad data
 PadData = Data.create()
 
@@ -548,9 +581,10 @@ PadData.metadata = {
 	{["offset"] = 0x08, ["size"] = 0x4, ["type"] = "unsigned", 	["name"] = "setIndex"},
 	{["offset"] = 0x0C, ["size"] = 0x4, ["type"] = "signed", 	["name"] = "dist_tmp"},
 }
+PadData.start_pointer_address = ({['U'] = 0x075d00, ['P'] = 0x064c40,})[__GE_VERSION__]
 
 function PadData.get_start_address()
-	return mainmemory.read_u32_be(0x75d00) - 0x80000000
+	return mainmemory.read_u32_be(PadData.start_pointer_address) - 0x80000000
 end
 
 function PadData.find_pad_by_number(padNum)
@@ -567,7 +601,7 @@ function PadData.find_pad_by_number(padNum)
 end
 
 function PadData.padPosFromNum(padNum)
-	local somePadInfo = mainmemory.read_u32_be(0x075d18) - 0x80000000
+	local somePadInfo = mainmemory.read_u32_be(PositionData.OtherPresetDataAddr) - 0x80000000
 	local padPos = {
 		x = mainmemory.readfloat(somePadInfo + (0x2c * padNum) + 0x0, true),
 		y = mainmemory.readfloat(somePadInfo + (0x2c * padNum) + 0x4, true),	-- addition, but surely?
@@ -610,8 +644,9 @@ SetData.metadata = {
 	{["offset"] = 0x08, ["size"] = 0x4, ["type"] = "signed", 	["name"] = "dist_tmp"},
 }
 
+SetData.start_pointer_address = ({['U'] = 0x075d04, ['P'] = 0x064c44})[__GE_VERSION__] 
 function SetData.get_start_address()
-	return mainmemory.read_u32_be(0x75d04) - 0x80000000
+	return mainmemory.read_u32_be(SetData.start_pointer_address) - 0x80000000
 end
 
 function SetData.get_set_neighbours(setPtr)

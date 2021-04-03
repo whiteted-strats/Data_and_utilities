@@ -1,13 +1,17 @@
+require "Data\\GE\\Version"
+
 GameData = {}
 
-GameData.random_number_generator_address = 0x024464
-GameData.current_scene_address = 0x02A8C0
-GameData.current_mission_address = 0x02A8FB
-GameData.global_timer_delta_address = 0x048378
-GameData.global_timer_address = 0x04837C
-GameData.mission_state_address = 0x0484C0 -- 0x0 = Not running, 0x1 = Running, 0x3 = Paused, 0x4 = running too?
-GameData.mission_timer_address = 0x079A20
-GameData.scale_address = 0x040F44
+GameData.random_number_generator_address = ({['U'] = 0x024464, ['P'] = 0x020FE4})[__GE_VERSION__]
+GameData.current_scene_address = ({['U'] = 0x02A8C0, ['P'] = 0x025e10})[__GE_VERSION__]
+GameData.current_mission_address = ({['U'] = 0x02A8FB, ['P'] = 0x025e4b})[__GE_VERSION__] -- PAL just based off offset from scene_address
+GameData.global_timer_delta_address = ({['U'] = 0x048378, ['P'] = 0x040FF8})[__GE_VERSION__]
+GameData.global_timer_address = ({['U'] = 0x04837C, ['P'] = 0x040FFC})[__GE_VERSION__]
+-- 0x0 = Not running, 0x1 = Running, 0x3 = Paused, 0x4 = running too?
+GameData.mission_state_address = ({['U'] = 0x0484C0, ['P'] = 0x041140})[__GE_VERSION__] -- PAL checkme!
+
+GameData.mission_timer_address = ({['U'] = 0x079A20, ['P'] = 0x068500})[__GE_VERSION__]	-- Sounds familiar
+GameData.scale_address = ({['U'] = 0x040F44, ['P'] = 0x03ab94})[__GE_VERSION__]
 
 GameData.scene_index_to_name = 
 {

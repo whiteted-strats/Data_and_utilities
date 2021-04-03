@@ -1,8 +1,11 @@
 require "Data\\Data"
+require "Data\\GE\\Version"
+
+-- 7f09cee8 relevant func.
 
 ExplosionTypeData = Data.create()
 
-ExplosionTypeData.start_address = 0x040284
+ExplosionTypeData.start_address = ({['U'] = 0x040284, ['P'] = 0x039ED4 })[__GE_VERSION__]
 ExplosionTypeData.size = 0x40
 ExplosionTypeData.type_count = 21
 ExplosionTypeData.metadata =
@@ -33,7 +36,9 @@ end
 
 ExplosionData = Data.create()
 
-ExplosionData.start_pointer_address = 0x07A144
+-- Looked at 0x7f09c250 in NTSC-U .. very much changed in PAL but there is still a pointer
+ExplosionData.start_pointer_address = ({['U'] = 0x07A144, ['P'] = 0x068C54})[__GE_VERSION__]
+
 ExplosionData.size = 0x3E0
 ExplosionData.capacity = 6
 ExplosionData.no_damage_frame_count = 8

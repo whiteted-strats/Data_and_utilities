@@ -1,12 +1,15 @@
 require "Data\\GE\\ObjectData"
+require "Data\\GE\\Version"
 
 -- TODO: Find a more suitable name for this class, since it represents 
 --		 all spawned weapons, and not just projectiles.
 ProjectileData = {}
 
-ProjectileData.start_address = 0x071E80
-ProjectileData.current_slot_address = 0x030AF8
-ProjectileData.previous_entry_pointer_address = 0x073EA4
+ProjectileData.start_address = ({['U'] = 0x071E80, ['P'] = 0x060dc0,})[__GE_VERSION__]	-- doesn't need reading
+
+-- NTSC-U only and irrel
+--ProjectileData.current_slot_address = 0x030AF8
+--ProjectileData.previous_entry_pointer_address = 0x073EA4
 ProjectileData.size = WeaponData.size
 ProjectileData.capacity = 30
 

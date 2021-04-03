@@ -1,6 +1,8 @@
 require "Data\\Data"
 require "Data\\GE\\PositionData"
 require "HUD_Matt\\HUD_matt_lib"	-- matrixFromMainMemory, applyHomMatrix, vectorAdd
+require "Data\\GE\\Version"
+require "Data\\GE\\PresetData"
 
 local dimension_mnemonics = {"x", "y", "z", "w"}
 
@@ -93,7 +95,7 @@ function doorDataGetHinges(door_address)
 	if ((hinge_type == 5) or (hinge_type == 9)) then
 		local preset = DoorData:get_value(door_address, "preset")
 
-		local presetDataPtr = (mainmemory.read_u32_be(0x075d1c) - 0x80000000) + 0x44 * preset
+		local presetDataPtr = (mainmemory.read_u32_be(PresetData.start_address) - 0x80000000) + 0x44 * preset
 
 		local pA = read_vector_directly(presetDataPtr, 3)
 		local normal_x = read_vector_directly(presetDataPtr + 0xc, 3)
@@ -390,10 +392,11 @@ TagData.metadata =
 	{["offset"] = 0x08, ["size"] = 0x4, ["type"] = "hex", 	["name"] = "previous_entry_pointer"},
 	{["offset"] = 0x0C, ["size"] = 0x4, ["type"] = "hex", 	["name"] = "tagged_object_pointer"}	
 }
+TagData.head_ptr = ({['U'] = 0x075d80, ['P'] = 0x064cc0,})[__GE_VERSION__]
 
 -- Ported from 7f057080
 function TagData.getObjectWithTag(tag)
-	currLink = mainmemory.read_u32_be(0x075d80)
+	currLink = mainmemory.read_u32_be(TagData.head_ptr)
 	while currLink ~= 0 do
 		currLink = currLink - 0x80000000
 		currTag = TagData:get_value(currLink, "object_number")
@@ -552,7 +555,7 @@ TintedGlassData = 			PhysicalObjectData .. TintedGlassData
 
 ObjectData = {}
 
-ObjectData.start_pointer_address = 0x075D0C
+ObjectData.start_pointer_address = ({['U'] = 0x075D0C, ['P'] = 0x064C4C,})[__GE_VERSION__]
 ObjectData.data_types =
 {
 	[0x01] = DoorData,
@@ -609,7 +612,7 @@ end
 
 function ObjectData.getAllCollectables()
 	-- Outer loop from 7f03d0d4
-	local relPosData = mainmemory.read_u32_be(0x30aa0)
+	local relPosData = mainmemory.read_u32_be(PositionData.head_ptr)
 	local isCollectible = {}
 
 	while relPosData ~= 0 do
