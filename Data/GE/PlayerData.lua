@@ -9,6 +9,7 @@ PlayerData.size = 0x2A80
 PlayerData.invincibility_length = 30
 PlayerData.metadata = 
 {
+	-- COMMON TO ALL VERSIONS HOPEFULLY
 	{["offset"] = 0x0074, ["size"] = 0x4, ["type"] = "float", 		["name"] = "clipping_height"},
 	{["offset"] = 0x00A0, ["size"] = 0x4, ["type"] = "float", 		["name"] = "ducking_height_offset"},
 	{["offset"] = 0x00A8, ["size"] = 0x4, ["type"] = "hex", 		["name"] = "position_data_pointer"},
@@ -34,7 +35,7 @@ PlayerData.metadata =
 	{["offset"] = 0x0170, ["size"] = 0x4, ["type"] = "float", 		["name"] = "strafe_movement_direction"},
 	{["offset"] = 0x0174, ["size"] = 0x4, ["type"] = "float", 		["name"] = "forward_speed_multiplier"},
 	{["offset"] = 0x0178, ["size"] = 0x4, ["type"] = "float", 		["name"] = "forward_speed_multiplier_2"},	
-	{["offset"] = 0x017C, ["size"] = 0x4, ["type"] = "unsigned", 	["name"] = "forward_speed_frame_counter"},
+	{["offset"] = 0x017C, ["size"] = 0x4, ["type"] = "unsigned", 	["name"] = "forward_speed_frame_counter"},	-- PAL agrees
 	{["offset"] = 0x0180, ["size"] = 0x4, ["type"] = "float", 		["name"] = "boost_factor_x"},
 	{["offset"] = 0x0188, ["size"] = 0x4, ["type"] = "float", 		["name"] = "boost_factor_z"},
 	{["offset"] = 0x01C8, ["size"] = 0x4, ["type"] = "hex", 		["name"] = "pause_animation_state"},
@@ -49,26 +50,37 @@ PlayerData.metadata =
 	{["offset"] = 0x03DB, ["size"] = 0x1, ["type"] = "unsigned", 	["name"] = "tint_blue"},
 	{["offset"] = 0x03DC, ["size"] = 0x4, ["type"] = "float", 		["name"] = "tint_alpha"},	
 	{["offset"] = 0x048C, ["size"] = 0xC, ["type"] = "vector", 		["name"] = "position"},
-	{["offset"] = 0x04B0, ["size"] = 0x4, ["type"] = "float", 		["name"] = "collision_radius"},
+	{["offset"] = 0x04B0, ["size"] = 0x4, ["type"] = "float", 		["name"] = "collision_radius"}, -- PAL agrees
 	{["offset"] = 0x04FC, ["size"] = 0xC, ["type"] = "vector", 		["name"] = "scaled_velocity"},
-	{["offset"] = 0x0520, ["size"] = 0xC, ["type"] = "vector", 		["name"] = "velocity"},
-	{["offset"] = 0x0550, ["size"] = 0x4, ["type"] = "float",		["name"] = "stationary_ground_offset"},
-
-	{["offset"] = 0x0A80, ["size"] = 0x4, ["type"] = "float", 		["name"] = "noise"},
-	{["offset"] = 0x0E28, ["size"] = 0x4, ["type"] = "float", 		["name"] = "left_noise"},
-
-
-	-- 0x870 some kind of shooting data
-	
-	{["offset"] = 0x0FD4, ["size"] = 0x4, ["type"] = "unsigned", ["name"] = "weapon_z_hold"},
-
-	-- There are a whole list of matrices down here, as for guards (see the body part HUD)
-	{["offset"] = 0x10D4, ["size"] = 0x4, ["type"] = "hex", ["name"] = "view_matrix_pointer"},
-
-	-- Used to see if we can unlock a door
-	{["offset"] = 0x11E0, ["size"] = 0x4, ["type"] = "hex", ["name"] = "owned_items"},
-	
+	{["offset"] = 0x0520, ["size"] = 0xC, ["type"] = "vector", 		["name"] = "velocity"},  -- PAL seems to agree
 }
+
+-- VERSION SPECIFIC offsets
+local version_metadata = ({
+	['U'] = {
+		{["offset"] = 0x0550, ["size"] = 0x4, ["type"] = "float",		["name"] = "stationary_ground_offset"},
+		-- Noises definitely differ to PAL
+		{["offset"] = 0x0A80, ["size"] = 0x4, ["type"] = "float", 		["name"] = "noise"},
+		{["offset"] = 0x0E28, ["size"] = 0x4, ["type"] = "float", 		["name"] = "left_noise"},
+
+		-- 0x870 some kind of shooting data
+		{["offset"] = 0x0FD4, ["size"] = 0x4, ["type"] = "unsigned", ["name"] = "weapon_z_hold"},
+		-- There are a whole list of matrices down here, as for guards (see the body part HUD)
+		{["offset"] = 0x10D4, ["size"] = 0x4, ["type"] = "hex", ["name"] = "view_matrix_pointer"},
+
+		-- Used to see if we can unlock a door - needed on PAL too
+		{["offset"] = 0x11E0, ["size"] = 0x4, ["type"] = "hex", ["name"] = "owned_items"},
+	},
+	['P'] = {
+		{["offset"] = 0x0A78, ["size"] = 0x4, ["type"] = "float", 		["name"] = "noise"},
+	}
+})[__GE_VERSION__]
+
+for _, md_itm in ipairs(version_metadata) do
+	table.insert(PlayerData.metadata, md_itm)
+end
+
+
 
 function PlayerData.get_start_address()
 	return (mainmemory.read_u32_be(PlayerData.start_pointer_address) - 0x80000000)
@@ -78,6 +90,11 @@ function PlayerData.get_value(_name)
 	local start_address = PlayerData.get_start_address()
 	
 	return PlayerData.__index.get_value(PlayerData, start_address, _name)
+end
+
+function PlayerData.has_value(_name)
+	local start_address = PlayerData.get_start_address()
+	return PlayerData.__index.has_value(PlayerData, start_address, _name)
 end
 
 function PlayerData.get_position()
@@ -110,7 +127,10 @@ function PlayerData.getNoise()
 	noise = PlayerData.get_value("noise") -- right noise
 	
 
-	local left_noise = PlayerData.get_value("left_noise")
+	local left_noise = 0
+	if PlayerData.has_value("left_noise") then
+		left_noise = PlayerData.get_value("left_noise")
+	end
 	-- mainmemory.read_u8(pdp + 0x87C + 0x3a8) ~= 0 and 
 	if left_noise > noise then
 		noise = left_noise
@@ -127,6 +147,9 @@ function PlayerData.hasKeyForLocks(locks)
 		return true
 	end
 
+	if not PlayerData.has_value("owned_items") then
+		return false
+	end
 	local firstItmPtr = PlayerData.get_value("owned_items")
 	local itmPtr = firstItmPtr
 	local wrapperPtr

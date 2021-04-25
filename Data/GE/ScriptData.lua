@@ -61,17 +61,18 @@ local function getScripts(scriptBlob)
 end
 
 
-ScriptData.scriptBlobAddr = ({['U'] = 0x75D14, ['P'] = 0x064c50,})[__GE_VERSION__]
+ScriptData.scriptBlobAddr = ({['U'] = 0x75D14, ['P'] = 0x064c54,})[__GE_VERSION__]
 function getLevelScripts()
 	-- Level scripts & Actors (10XX & 04XX)
 	return getScripts(mainmemory.read_u32_be(ScriptData.scriptBlobAddr) - 0x80000000)
 end
 
 local virtual_offset = ({['U'] = 0x34b30, ['P'] = 0x329f0, ['J'] = 0x34b70})[__GE_VERSION__]
-ScriptData.instrJumpTableAddr = ({['U'] = 0x052100, ['P'] = 0x048240})[__GE_VERSION__]
+ScriptData.instrLengthJumpTableAddr = ({['U'] = 0x052100, ['P'] = 0x048240})[__GE_VERSION__]
 
 local function getCommandLength(scriptPtr)
     local id = mainmemory.read_u8(scriptPtr)
+    assert(id < 0xfd)
     if (id == 0xAD) then
         -- Comment, variable length
         local i = 1
@@ -83,7 +84,7 @@ local function getCommandLength(scriptPtr)
         -- All simple functions of the form
         -- 03e00008     jr ra
         -- 2402XXXX     li v0, X    (addiu v0, zero, X)
-        local funcAddr = mainmemory.read_u32_be(ScriptData.instrJumpTableAddr  + 4*id)
+        local funcAddr = mainmemory.read_u32_be(ScriptData.instrLengthJumpTableAddr  + 4*id)
         -- 7F virtual -> physical on the ROM
         funcAddr = funcAddr + virtual_offset - 0x7f000000
         memory.usememorydomain("ROM")

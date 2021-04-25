@@ -1,6 +1,6 @@
 require "Data\\Data"
 require "Data\\GE\\PositionData"
-require "HUD_Matt\\HUD_matt_lib"	-- matrixFromMainMemory, applyHomMatrix, vectorAdd
+require "GE_HUD\\HUD_Matt\\HUD_matt_lib"	-- matrixFromMainMemory, applyHomMatrix, vectorAdd
 require "Data\\GE\\Version"
 require "Data\\GE\\PresetData"
 

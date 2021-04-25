@@ -1,9 +1,3 @@
-
--- If you do need these, an old-er version of HUD_Matt is on my github
--- require "HUD_Matt\\HUD_matt_core"
--- require "HUD_Matt\\HUD_matt_lib"
--- require "HUD_Matt\\matrix_inverse"
-
 require "Data\\GE\\PositionData"
 require "Data\\GE\\PlayerData"
 require "Data\\GE\\ObjectData"
